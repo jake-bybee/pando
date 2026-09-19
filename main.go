@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-
 	"pando/internal/config"
+	"pando/internal/health"
 )
 
 func main() {
@@ -12,6 +12,10 @@ func main() {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
 
-	log.Printf("Loaded environment variables: %+v", envVariables)
+	log.Println("Loaded environment variables")
 
+	reachable := health.RunHealthCheck(envVariables)
+	if !reachable {
+		log.Fatalf("%s is not reachable", envVariables.ImmichUrl)
+	}
 }
