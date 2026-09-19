@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"pando/internal/config"
 	"pando/internal/health"
 )
@@ -11,11 +12,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
-
 	log.Println("Loaded environment variables")
 
-	reachable := health.RunHealthCheck(envVariables)
+	healthStore := health.NewStore(envVariables, &http.Client{})
+	reachable := healthStore.RunHealthCheck()
 	if !reachable {
 		log.Fatalf("%s is not reachable", envVariables.ImmichUrl)
 	}
+
+	log.Printf("%s is reachable", envVariables.ImmichUrl)
+
 }
