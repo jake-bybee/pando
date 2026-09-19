@@ -47,6 +47,7 @@ func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		return nil, fmt.Errorf("unexpected response status for %s: %v, body: %s", url, resp.Status, string(body))
 	}
 

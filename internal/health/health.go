@@ -73,6 +73,7 @@ func (s *Store) immichApiKeyValid() (bool, error) {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -99,26 +100,13 @@ func (s *Store) immichApiKeyValid() (bool, error) {
 func (s *Store) immichApiKeyPermissionsSufficient() (bool, error) {
 	endpoint := "/api/api-keys/me"
 	fullUrl := s.config.ImmichUrl + endpoint
-	header := http.Header{"x-api-key": []string{s.config.ImmichApiToken}}
 
-	req, err := http.NewRequest("GET", fullUrl, nil)
-	if err != nil {
-		log.Printf("Failed to create request for %s: %v", s.config.ImmichUrl, err)
-		return false, err
-	}
-	req.Header = header
-
-	resp, err := s.client.Do(req)
+	resp, err := s.utils.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("Unexpected response status for %s: %v", s.config.ImmichUrl, resp.Status)
-		return false, fmt.Errorf("unexpected response status: %v", resp.Status)
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
