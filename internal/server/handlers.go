@@ -50,6 +50,16 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	registeredTime := s.utils.TimeNow()
+	peers.RegisterPeer(peers.Peer{
+		Url:       registerRequest.Url,
+		Id:        urlHash,
+		FirstSeen: registeredTime,
+		LastSeen:  registeredTime,
+		Status:    "",
+	})
+	fmt.Println("[/registerPeer] Registered peer:", registerRequest.Url)
+
 	var status string
 	isHealthy := s.peersStore.CheckPeerHealth(urlHash)
 	if !isHealthy {
@@ -58,15 +68,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		status = "healthy"
 	}
 
-	registeredTime := s.utils.TimeNow()
-	registeredPeer := peers.RegisterPeer(peers.Peer{
-		Url:       registerRequest.Url,
-		Id:        urlHash,
-		FirstSeen: registeredTime,
-		LastSeen:  registeredTime,
-		Status:    status,
-	})
-	fmt.Println("[/registerPeer] Registered peer:", registeredPeer)
+	registeredPeer := peers.UpdatePeerStatus(urlHash, status)
 
 	jsonString, err := json.Marshal(registeredPeer)
 	if err != nil {

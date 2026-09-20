@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"pando/internal/config"
 	"pando/internal/health"
+	"pando/internal/peers"
 	"pando/internal/server"
 	"pando/internal/utils"
 )
@@ -18,6 +19,7 @@ func main() {
 	}
 	log.Println("Loaded environment variables")
 	var utils *utils.Store = utils.NewStore(envVariables, client)
+	var peersStore *peers.Store = peers.NewStore(utils, client)
 
 	healthStore := health.NewStore(envVariables, client, utils)
 	reachable := healthStore.RunHealthCheck()
@@ -26,7 +28,7 @@ func main() {
 	}
 	log.Print("Health check passed, Immich is reachable")
 
-	server := server.NewServer(healthStore)
+	server := server.NewServer(healthStore, utils, peersStore)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

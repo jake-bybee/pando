@@ -14,9 +14,9 @@ type Server struct {
 	peersStore  *peers.Store
 }
 
-func NewServer(healthStore *health.Store) *Server {
+func NewServer(healthStore *health.Store, utils *utils.Store, peersStore *peers.Store) *Server {
 
-	return &Server{healthStore: healthStore}
+	return &Server{healthStore: healthStore, utils: utils, peersStore: peersStore}
 }
 
 func (s *Server) Start() error {

@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"fmt"
 	"net/http"
 	"pando/internal/utils"
 )
@@ -21,6 +22,13 @@ var peersTable *PeersTable = initPeersTable()
 type Store struct {
 	utils  *utils.Store
 	client *http.Client
+}
+
+func NewStore(utils *utils.Store, client *http.Client) *Store {
+	return &Store{
+		utils:  utils,
+		client: client,
+	}
 }
 
 func initPeersTable() *PeersTable {
@@ -49,8 +57,13 @@ func GetPeerById(peerId string) *Peer {
 	return nil
 }
 
-func UpdatePeerStatus(peerId string, status string) {
-	GetPeerById(peerId).Status = status
+func UpdatePeerStatus(peerId string, status string) *Peer {
+	peer := GetPeerById(peerId)
+	if peer != nil {
+		peer.Status = status
+		return peer
+	}
+	return nil
 }
 
 func (s *Store) CheckPeerHealth(peerId string) bool {
@@ -59,12 +72,15 @@ func (s *Store) CheckPeerHealth(peerId string) bool {
 		return false
 	}
 
-	healthUrl := peer.Url + "/health"
+	healthUrl := "http://" + peer.Url + "/health"
 	resp, err := s.client.Get(healthUrl)
 	if err != nil {
+		fmt.Println("Failed to check health for peer:", peerId, "error:", err)
 		return false
 	}
 	defer resp.Body.Close()
+
+	fmt.Println("Checked health for peer:", peerId, "status code:", resp.StatusCode)
 
 	return resp.StatusCode == http.StatusOK
 }
