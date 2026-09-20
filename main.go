@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"pando/internal/config"
 	"pando/internal/health"
+	"pando/internal/server"
 	"pando/internal/utils"
 )
 
@@ -21,9 +22,13 @@ func main() {
 	healthStore := health.NewStore(envVariables, client, utils)
 	reachable := healthStore.RunHealthCheck()
 	if !reachable {
-		log.Fatalf("%s is not reachable", envVariables.ImmichUrl)
+		log.Fatal("Health check failed!!!")
 	}
+	log.Print("Health check passed, Immich is reachable")
 
-	log.Printf("%s is reachable", envVariables.ImmichUrl)
+	server := server.NewServer(healthStore)
+	if err := server.Start(); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 
 }

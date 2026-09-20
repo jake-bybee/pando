@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -15,6 +16,7 @@ type Config struct {
 	MasterPandoPort  string
 	MasterPandoUrl   string
 	BackupFolderPath string
+	TimeZone         string
 }
 
 func LoadEnv() (Config, error) {
@@ -37,6 +39,7 @@ func loadFromEnvironment() (*Config, error) {
 		MasterPandoPort:  os.Getenv("MASTER_PANDO_PORT"),
 		MasterPandoUrl:   os.Getenv("MASTER_PANDO_URL"),
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
+		TimeZone:         os.Getenv("TIME_ZONE"),
 	}
 
 	if config.ImmichUrl == "" {
@@ -60,6 +63,13 @@ func loadFromEnvironment() (*Config, error) {
 		return nil, fmt.Errorf("BACKUP_FOLDER_PATH is not set")
 	}
 	config.BackupFolderPath = strings.TrimRight(config.BackupFolderPath, "/") + "/"
+
+	if config.TimeZone == "" || func() bool {
+		_, err := time.LoadLocation(config.TimeZone)
+		return err != nil
+	}() {
+		config.TimeZone = "UTC" // default time zone if not set
+	}
 
 	return config, nil
 }

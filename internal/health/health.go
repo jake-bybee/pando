@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"pando/internal/config"
+	"pando/internal/system"
 	"pando/internal/utils"
 	"slices"
 )
@@ -15,6 +16,7 @@ type Store struct {
 	config config.Config
 	client *http.Client
 	utils  *utils.Store
+	system *system.Store
 }
 
 type validateTokenResponse struct {
@@ -26,16 +28,23 @@ type apiKeyPermissionsResponse struct {
 }
 
 func NewStore(config config.Config, client *http.Client, utils *utils.Store) *Store {
+	systemStore := system.NewStore(config)
+
 	return &Store{
 		config: config,
 		client: client,
 		utils:  utils,
+		system: systemStore,
 	}
 }
 
 func (s *Store) RunHealthCheck() bool {
 	if !s.isImmichReachable() {
 		log.Printf("%s is not reachable", s.config.ImmichUrl)
+		return false
+	}
+	if err := s.system.SystemHealthCheck(); err != nil {
+		log.Printf("System health check failed: %v", err)
 		return false
 	}
 

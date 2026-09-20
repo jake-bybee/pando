@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func (u *Store) Unzip(src, dest string) error {
@@ -54,4 +55,9 @@ func uniquePath(path string) string {
 		}
 		path = fmt.Sprintf("%s(%d)%s", base, i, ext)
 	}
+}
+
+func (u *Store) TimeNow() string {
+	loc, _ := time.LoadLocation(u.config.TimeZone)
+	return time.Now().In(loc).Format(time.RFC3339)
 }
