@@ -11,10 +11,13 @@ import (
 	"pando/internal/config"
 	"pando/internal/utils"
 	"strings"
+	"sync"
 )
 
 // var MAX_DOWNLOAD_BATCH_SIZE_BYTES = (1024 * 1024 * 1024) / 2 // 500 MB
 var MAX_DOWNLOAD_BATCH_SIZE_BYTES = 29632241 / 2
+
+const MAX_CONCURRENT_DOWNLOADS = 5
 
 type Store struct {
 	client *http.Client
@@ -61,12 +64,47 @@ func (s *Store) BulkDownload(assetIds []string) (bool, error) {
 		return false, fmt.Errorf("failed to get all download batches: %v", err)
 	}
 
-	for _, archive := range batchInfo.Archives {
-		s.bulkDownload(archive.AssetIds)
+	err = s.bulkDownloadRoutineSwarm(batchInfo, s.config.BackupFolderPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to download batches: %v", err)
 	}
 
 	return true, nil
 
+}
+
+func (s *Store) bulkDownloadRoutineSwarm(batches BatchDownloadInfoResponse, dest string) error {
+	var wg sync.WaitGroup
+
+	type errorResult struct {
+		AssetIds []string
+		Err      error
+	}
+
+	downloadsChannel := make(chan struct{}, MAX_CONCURRENT_DOWNLOADS)
+	errorsChannel := make(chan errorResult)
+
+	for _, archive := range batches.Archives {
+		wg.Add(1)
+		go func(assetIds []string) {
+			defer wg.Done()
+			downloadsChannel <- struct{}{}
+			defer func() { <-downloadsChannel }()
+			numFilesDownloaded, err := s.bulkDownload(assetIds, dest)
+			if err != nil {
+				log.Printf("Failed to bulk download assets %v: %v", assetIds, err)
+				errorsChannel <- errorResult{AssetIds: assetIds, Err: err}
+			}
+			log.Printf("Successfully downloaded %d files to %s", numFilesDownloaded, dest)
+
+		}(archive.AssetIds)
+	}
+	wg.Wait()
+	close(errorsChannel)
+	for errResult := range errorsChannel {
+		log.Printf("Error downloading assets %v: %v", errResult.AssetIds, errResult.Err)
+	}
+	return nil
 }
 
 func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
@@ -98,7 +136,7 @@ func determineHowManyBatches(batchInfo BatchDownloadInfoResponse) int {
 	return len(batchInfo.Archives)
 }
 
-func (s *Store) bulkDownload(assetIds []string) {
+func (s *Store) bulkDownload(assetIds []string, dest string) (int, error) {
 	endpoint := "/api/download/archive"
 	fullUrl := s.config.ImmichUrl + endpoint
 
@@ -106,14 +144,14 @@ func (s *Store) bulkDownload(assetIds []string) {
 	resp, err := s.utils.ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: assetIds})
 	if err != nil {
 		log.Printf("Failed to execute bulk download request for %s: %v", fullUrl, err)
-		return
+		return 0, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Failed to read response body for bulk download request for %s: %v", fullUrl, err)
-		return
+		return 0, err
 	}
 
 	fileName := fmt.Sprintf("%x.zip", sha256.Sum256([]byte(strings.Join(assetIds, ","))))
@@ -122,17 +160,18 @@ func (s *Store) bulkDownload(assetIds []string) {
 	err = os.WriteFile(filePath, body, 0644)
 	if err != nil {
 		log.Printf("Failed to write bulk download file %s: %v", filePath, err)
-		return
+		return 0, err
 	}
 	err = s.utils.Unzip(filePath, s.config.BackupFolderPath)
 	if err != nil {
 		log.Printf("Failed to unzip bulk download file %s: %v", filePath, err)
-		return
+		return 0, err
 	}
 	log.Printf("Successfully wrote bulk download file %s", filePath)
 
 	os.Remove(filePath) // Clean up the zip file after extraction
 
+	return len(assetIds), nil
 }
 
 func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) (BatchDownloadInfoResponse, error) {
