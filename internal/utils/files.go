@@ -2,9 +2,11 @@ package utils
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func (u *Store) Unzip(src, dest string) error {
@@ -15,7 +17,7 @@ func (u *Store) Unzip(src, dest string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
-		path := filepath.Join(dest, f.Name)
+		path := uniquePath(filepath.Join(dest, f.Name))
 
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(path, os.ModePerm)
@@ -40,4 +42,16 @@ func (u *Store) Unzip(src, dest string) error {
 		dstFile.Close()
 	}
 	return nil
+}
+
+func uniquePath(path string) string {
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+
+	for i := 1; ; i++ {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return path
+		}
+		path = fmt.Sprintf("%s(%d)%s", base, i, ext)
+	}
 }
