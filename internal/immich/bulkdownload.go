@@ -1,6 +1,7 @@
 package immich
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,9 +10,11 @@ import (
 	"os"
 	"pando/internal/config"
 	"pando/internal/utils"
+	"strings"
 )
 
-var MAX_DOWNLOAD_BATCH_SIZE_BYTES = 1024 * 1024 * 1024 // 1 GB
+// var MAX_DOWNLOAD_BATCH_SIZE_BYTES = (1024 * 1024 * 1024) / 2 // 500 MB
+var MAX_DOWNLOAD_BATCH_SIZE_BYTES = 29632241 / 2
 
 type Store struct {
 	client *http.Client
@@ -41,7 +44,32 @@ func NewStore(config config.Config, client *http.Client, utils *utils.Store) *St
 	}
 }
 
-func (s *Store) GetInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
+func (s *Store) BulkDownload(assetIds []string) (bool, error) {
+	if len(assetIds) == 0 {
+		log.Printf("No asset IDs provided for bulk download")
+		return false, fmt.Errorf("no asset IDs provided for bulk download")
+	}
+	batchInfo, err := s.getInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: assetIds})
+	if err != nil {
+		log.Printf("Failed to get batch download info: %v", err)
+		return false, fmt.Errorf("failed to get batch download info: %v", err)
+	}
+
+	batchInfo, err = s.getAllDownloadBatches(batchInfo)
+	if err != nil {
+		log.Printf("Failed to get all download batches: %v", err)
+		return false, fmt.Errorf("failed to get all download batches: %v", err)
+	}
+
+	for _, archive := range batchInfo.Archives {
+		s.bulkDownload(archive.AssetIds)
+	}
+
+	return true, nil
+
+}
+
+func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
 	endpoint := "/api/download/info"
 	fullUrl := s.config.ImmichUrl + endpoint
 	log.Printf("Requesting batch download info from %s", endpoint)
@@ -66,12 +94,11 @@ func (s *Store) GetInfoForBatchDownload(payload BatchDownloadInfoPayload) (Batch
 	return batchInfo, nil
 }
 
-func DetermineHowManyBatches(batchInfo BatchDownloadInfoResponse) int {
+func determineHowManyBatches(batchInfo BatchDownloadInfoResponse) int {
 	return len(batchInfo.Archives)
 }
 
 func (s *Store) bulkDownload(assetIds []string) {
-
 	endpoint := "/api/download/archive"
 	fullUrl := s.config.ImmichUrl + endpoint
 
@@ -89,28 +116,48 @@ func (s *Store) bulkDownload(assetIds []string) {
 		return
 	}
 
-	os.WriteFile("test.zip", body, 0644)
+	fileName := fmt.Sprintf("%x.zip", sha256.Sum256([]byte(strings.Join(assetIds, ","))))
+	filePath := s.config.BackupFolderPath + fileName
+
+	err = os.WriteFile(filePath, body, 0644)
+	if err != nil {
+		log.Printf("Failed to write bulk download file %s: %v", filePath, err)
+		return
+	}
+	err = s.utils.Unzip(filePath, s.config.BackupFolderPath)
+	if err != nil {
+		log.Printf("Failed to unzip bulk download file %s: %v", filePath, err)
+		return
+	}
+	log.Printf("Successfully wrote bulk download file %s", filePath)
+
+	os.Remove(filePath) // Clean up the zip file after extraction
 
 }
 
-func (s *Store) DownloadAllBatches(batchInfo BatchDownloadInfoResponse) {
-	numBatches := DetermineHowManyBatches(batchInfo)
+func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) (BatchDownloadInfoResponse, error) {
+	numBatches := determineHowManyBatches(batchInfo)
 
 	for i := 0; i < numBatches; i++ {
 		archive := batchInfo.Archives[i]
 		if archive.Size > MAX_DOWNLOAD_BATCH_SIZE_BYTES {
-			1 == 1
+			splitBatches, err := s.splitAssetBatch(archive)
+			if err != nil {
+				log.Printf("Failed to split asset batch: %v", err)
+				return BatchDownloadInfoResponse{}, fmt.Errorf("failed to split asset batch")
+			}
+			// Replace the original archive with the split batches in the batchInfo
+			batchInfo.Archives = append(batchInfo.Archives[:i], append(splitBatches, batchInfo.Archives[i+1:]...)...)
+			i = i + len(splitBatches) - 1
 		}
 
-		for i := 0; i < numBatches; i++ {
-			archive := batchInfo.Archives[i]
-			log.Printf("Downloading archive %d with size %d and asset IDs: %+v", i, archive.Size, archive.AssetIds)
-			s.bulkDownload(archive.AssetIds)
-		}
 	}
+	return batchInfo, nil
 }
 
 func (s *Store) splitAssetBatch(archive Archives) ([]Archives, error) {
+	var result []Archives
+
 	var batches []struct {
 		AssetIds []string
 		Size     int
@@ -130,10 +177,27 @@ func (s *Store) splitAssetBatch(archive Archives) ([]Archives, error) {
 			batch := &batches[i]
 
 			if batch.Approved {
+				batches = append(batches[:i], batches[i+1:]...)
+				result = append(result, Archives{
+					AssetIds: batch.AssetIds,
+					Size:     batch.Size,
+				})
+				i--
 				continue
 			}
 
-			batchInfo, err := s.GetInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: batch.AssetIds})
+			if len(batch.AssetIds) <= 1 {
+				result = append(result, Archives{
+					AssetIds: batch.AssetIds,
+					Size:     batch.Size,
+				})
+				batch.Approved = true
+				batches = append(batches[:i], batches[i+1:]...)
+				i--
+				continue
+			}
+
+			batchInfo, err := s.getInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: batch.AssetIds})
 			if err != nil {
 				log.Printf("Failed to get info for batch: %v", err)
 				return nil, fmt.Errorf("failed to get info for batch: %v", err)
@@ -147,6 +211,12 @@ func (s *Store) splitAssetBatch(archive Archives) ([]Archives, error) {
 
 			if batch.Size <= MAX_DOWNLOAD_BATCH_SIZE_BYTES {
 				batch.Approved = true
+				result = append(result, Archives{
+					AssetIds: batch.AssetIds,
+					Size:     batch.Size,
+				})
+				batches = append(batches[:i], batches[i+1:]...)
+				i--
 				continue
 			} else {
 				batch.Approved = false
@@ -173,12 +243,9 @@ func (s *Store) splitAssetBatch(archive Archives) ([]Archives, error) {
 
 	}
 
-	var result []Archives
-	for _, batch := range batches {
-		result = append(result, Archives{
-			AssetIds: batch.AssetIds,
-			Size:     batch.Size,
-		})
+	if len(result) == 0 {
+		result = append(result, archive)
+		log.Printf("Remaining batches: %v", len(result))
 	}
 
 	return result, nil

@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	ImmichUrl       string
-	ImmichApiToken  string
-	MasterPandoPort string
-	MasterPandoUrl  string
+	ImmichUrl        string
+	ImmichApiToken   string
+	MasterPandoPort  string
+	MasterPandoUrl   string
+	BackupFolderPath string
 }
 
 func LoadEnv() (Config, error) {
@@ -31,10 +32,11 @@ func LoadEnv() (Config, error) {
 
 func loadFromEnvironment() (*Config, error) {
 	config := &Config{
-		ImmichUrl:       os.Getenv("IMMICH_URL"),
-		ImmichApiToken:  os.Getenv("IMMICH_API_TOKEN"),
-		MasterPandoPort: os.Getenv("MASTER_PANDO_PORT"),
-		MasterPandoUrl:  os.Getenv("MASTER_PANDO_URL"),
+		ImmichUrl:        os.Getenv("IMMICH_URL"),
+		ImmichApiToken:   os.Getenv("IMMICH_API_TOKEN"),
+		MasterPandoPort:  os.Getenv("MASTER_PANDO_PORT"),
+		MasterPandoUrl:   os.Getenv("MASTER_PANDO_URL"),
+		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
 	}
 
 	if config.ImmichUrl == "" {
@@ -54,6 +56,10 @@ func loadFromEnvironment() (*Config, error) {
 			return nil, err
 		}
 	}
+	if config.BackupFolderPath == "" {
+		return nil, fmt.Errorf("BACKUP_FOLDER_PATH is not set")
+	}
+	config.BackupFolderPath = strings.TrimRight(config.BackupFolderPath, "/") + "/"
 
 	return config, nil
 }
