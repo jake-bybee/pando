@@ -22,13 +22,13 @@ func NewStore(config config.Config, client *http.Client) *Store {
 }
 
 func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal payload for %s: %v", url, err)
-	}
-
 	var req *http.Request
+	var err error
 	if payload != nil {
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal payload for %s: %v", url, err)
+		}
 		req, err = http.NewRequest(method, url, bytes.NewReader(payloadBytes))
 	} else {
 		req, err = http.NewRequest(method, url, nil)
