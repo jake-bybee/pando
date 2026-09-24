@@ -136,7 +136,7 @@ func (s *Store) GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, er
 
 		log.Printf("Requesting file sizes data for %v files from %s (cursor=%q)", len(assetIds), fullUrl, cursor)
 
-		resp, err := s.utils.ImmichFetcher(fullUrl, "POST", payload)
+		resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute request for %s: %v", fullUrl, err)
 		}
@@ -259,7 +259,7 @@ func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (Batch
 	fullUrl := s.config.ImmichUrl + endpoint
 	log.Printf("Requesting batch download info from %s", endpoint)
 
-	resp, err := s.utils.ImmichFetcher(fullUrl, "POST", payload)
+	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 	if err != nil {
 		return BatchDownloadInfoResponse{}, fmt.Errorf("failed to execute request for %s: %v", fullUrl, err)
 	}
@@ -284,7 +284,7 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	fullUrl := s.config.ImmichUrl + endpoint
 
 	log.Printf("Preparing to bulk download %d assets (%s) from %s", len(chunk.AssetIds), formatBytes(chunk.TotalSize), fullUrl)
-	resp, err := s.utils.ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
+	resp, err := s.ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
 	if err != nil {
 		log.Printf("Failed to execute bulk download request for %s: %v", fullUrl, err)
 		return 0, err

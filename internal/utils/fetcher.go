@@ -1,55 +1,43 @@
 package utils
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"net/http"
-	"pando/internal/config"
+	"net/url"
+	"strings"
 )
 
 type Store struct {
-	client *http.Client
-	config config.Config
+	client   *http.Client
+	Timezone string
 }
 
-func NewStore(config config.Config, client *http.Client) *Store {
+func NewStore(client *http.Client, timezone string) *Store {
 	return &Store{
-		client: client,
-		config: config,
+		client:   client,
+		Timezone: timezone,
 	}
 }
 
-func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {
-	var req *http.Request
-	var err error
-	if payload != nil {
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal payload for %s: %v", url, err)
-		}
-		req, err = http.NewRequest(method, url, bytes.NewReader(payloadBytes))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
+func NormalizeURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", errors.New("empty url")
 	}
 
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+
+	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", s.config.ImmichApiToken)
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request for %s: %v", url, err)
+		return "", err
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected response status for %s: %v, body: %s", url, resp.Status, string(body))
-	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
 
-	return resp, nil
+	u.Path = strings.TrimRight(u.Path, "/")
+
+	return u.String(), nil
 }

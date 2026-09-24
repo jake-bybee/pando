@@ -7,16 +7,16 @@ import (
 	"log"
 	"net/http"
 	"pando/internal/config"
+	"pando/internal/immich"
 	"pando/internal/system"
-	"pando/internal/utils"
 	"slices"
 )
 
 type Store struct {
-	config config.Config
-	client *http.Client
-	utils  *utils.Store
-	system *system.Store
+	config      config.Config
+	client      *http.Client
+	immichStore *immich.Store
+	system      *system.Store
 }
 
 type validateTokenResponse struct {
@@ -27,14 +27,14 @@ type apiKeyPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-func NewStore(config config.Config, client *http.Client, utils *utils.Store) *Store {
+func NewStore(config config.Config, client *http.Client, immichStore *immich.Store) *Store {
 	systemStore := system.NewStore(config)
 
 	return &Store{
-		config: config,
-		client: client,
-		utils:  utils,
-		system: systemStore,
+		config:      config,
+		client:      client,
+		immichStore: immichStore,
+		system:      systemStore,
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *Store) immichApiKeyValid() (bool, error) {
 	apiKeyPermissions := "/api/auth/validateToken"
 	fullUrl := s.config.ImmichUrl + apiKeyPermissions
 
-	resp, err := s.utils.ImmichFetcher(fullUrl, "POST", nil)
+	resp, err := s.immichStore.ImmichFetcher(fullUrl, "POST", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err
@@ -110,7 +110,7 @@ func (s *Store) immichApiKeyPermissionsSufficient() (bool, error) {
 	endpoint := "/api/api-keys/me"
 	fullUrl := s.config.ImmichUrl + endpoint
 
-	resp, err := s.utils.ImmichFetcher(fullUrl, "GET", nil)
+	resp, err := s.immichStore.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err

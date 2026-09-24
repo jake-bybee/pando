@@ -13,6 +13,10 @@ type RegisterPeerRequest struct {
 	Url string `json:"url"`
 }
 
+type RegisterPeersReceivedRequest struct {
+	Peers []RegisterPeerRequest `json:"peers"`
+}
+
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
@@ -100,4 +104,46 @@ func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(jsonString))
 	fmt.Println("[/relayPeers] Successfully relayed peers list")
+}
+
+func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("[/registerPeersReceived] Received request to register peers")
+	defer r.Body.Close()
+
+	payload := io.Reader(r.Body)
+
+	var registerRequest RegisterPeersReceivedRequest
+	decoder := json.NewDecoder(payload)
+	err := decoder.Decode(&registerRequest)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid request payload"))
+		fmt.Println("[/registerPeersReceived] Invalid request payload")
+		return
+	}
+
+	for _, peerInfo := range registerRequest.Peers {
+		urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(peerInfo.Url)))
+		if peers.GetPeerById(urlHash) == nil {
+			registeredTime := s.utils.TimeNow()
+			peers.RegisterPeer(peers.Peer{
+				Url:       peerInfo.Url,
+				Id:        urlHash,
+				FirstSeen: registeredTime,
+				LastSeen:  registeredTime,
+				Status:    "",
+			})
+			isHealthy := s.peersStore.CheckPeerHealth(urlHash)
+			if isHealthy {
+				peers.UpdatePeerStatus(urlHash, "healthy")
+			} else {
+				peers.UpdatePeerStatus(urlHash, "unhealthy")
+			}
+			fmt.Println("[/registerPeersReceived] Registered peer:", peerInfo.Url)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Peers registration processed"))
+	fmt.Println("[/registerPeersReceived] Successfully processed peers registration")
 }

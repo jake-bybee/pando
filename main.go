@@ -19,17 +19,18 @@ func main() {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
 	log.Println("Loaded environment variables")
-	var utils *utils.Store = utils.NewStore(envVariables, client)
-	var peersStore *peers.Store = peers.NewStore(utils, client)
+	var utilsStore *utils.Store = utils.NewStore(client, envVariables.TimeZone)
+	immichStore := immich.NewStore(envVariables, client, utilsStore)
+	var peersStore *peers.Store = peers.NewStore(utilsStore, client)
 
-	healthStore := health.NewStore(envVariables, client, utils)
+	healthStore := health.NewStore(envVariables, client, immichStore)
 	reachable := healthStore.RunHealthCheck()
 	if !reachable {
 		log.Fatal("Health check failed!!!")
 	}
 	log.Print("Health check passed, Immich is reachable")
 
-	server := server.NewServer(healthStore, utils, peersStore, immich.NewStore(envVariables, client, utils))
+	server := server.NewServer(healthStore, utilsStore, peersStore, immichStore)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

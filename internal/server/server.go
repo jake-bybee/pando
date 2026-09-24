@@ -34,6 +34,10 @@ func (s *Server) Start() error {
 		s.RelayPeersHandler(w, r)
 	})
 
+	http.HandleFunc("/registerPeersReceived", func(w http.ResponseWriter, r *http.Request) {
+		s.RegisterPeersReceivedHandler(w, r)
+	})
+
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.immichStore.BulkDownload(
 			[]string{

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"pando/internal/utils"
 	"strings"
 	"time"
 
@@ -42,8 +43,14 @@ func loadFromEnvironment() (*Config, error) {
 		TimeZone:         os.Getenv("TIME_ZONE"),
 	}
 
+	var err error
 	if config.ImmichUrl == "" {
 		return nil, fmt.Errorf("IMMICH_URL is not set")
+	} else {
+		config.ImmichUrl, err = utils.NormalizeURL(config.ImmichUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize IMMICH_URL: %v", err)
+		}
 	}
 	if config.ImmichApiToken == "" {
 		return nil, fmt.Errorf("IMMICH_API_TOKEN is not set")
@@ -53,11 +60,15 @@ func loadFromEnvironment() (*Config, error) {
 		config.MasterPandoPort = "8080" // default port if not set
 	}
 	if config.MasterPandoUrl == "" {
-		var err error
-		config.MasterPandoUrl, err = getMasterPandoUrlFromImmichUrl(config.ImmichUrl, config.MasterPandoPort)
+		masterPandoUrl, err := getMasterPandoUrlFromImmichUrl(config.ImmichUrl, config.MasterPandoPort)
 		if err != nil {
 			return nil, err
 		}
+		config.MasterPandoUrl, err = utils.NormalizeURL(masterPandoUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize MASTER_PANDO_URL: %v", err)
+		}
+
 	}
 	if config.BackupFolderPath == "" {
 		return nil, fmt.Errorf("BACKUP_FOLDER_PATH is not set")

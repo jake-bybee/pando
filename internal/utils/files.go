@@ -58,6 +58,6 @@ func uniquePath(path string) string {
 }
 
 func (u *Store) TimeNow() string {
-	loc, _ := time.LoadLocation(u.config.TimeZone)
+	loc, _ := time.LoadLocation(u.Timezone)
 	return time.Now().In(loc).Format(time.RFC3339)
 }
