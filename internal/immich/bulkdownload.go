@@ -20,7 +20,6 @@ const MAX_CONCURRENT_DOWNLOADS = 5
 type Store struct {
 	client *http.Client
 	config config.Config
-	utils  *utils.Store
 }
 
 type BatchDownloadInfoResponse struct {
@@ -74,11 +73,10 @@ type Chunk struct {
 	TotalSize int64
 }
 
-func NewStore(config config.Config, client *http.Client, utils *utils.Store) *Store {
+func NewStore(config config.Config, client *http.Client) *Store {
 	return &Store{
 		client: client,
 		config: config,
-		utils:  utils,
 	}
 }
 
@@ -310,7 +308,7 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 		dest = s.config.BackupFolderPath
 	}
 
-	err = s.utils.Unzip(filePath, dest)
+	err = utils.Unzip(filePath, dest)
 	if err != nil {
 		log.Printf("Failed to unzip bulk download file %s: %v", filePath, err)
 		return 0, err

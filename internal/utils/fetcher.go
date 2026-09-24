@@ -2,21 +2,16 @@ package utils
 
 import (
 	"errors"
-	"net/http"
 	"net/url"
 	"strings"
 )
 
-type Store struct {
-	client   *http.Client
-	Timezone string
-}
+var Timezone string
 
-func NewStore(client *http.Client, timezone string) *Store {
-	return &Store{
-		client:   client,
-		Timezone: timezone,
-	}
+func Init(timezone string) {
+
+	Timezone = timezone
+
 }
 
 func NormalizeURL(raw string) (string, error) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"pando/internal/peers"
+	"pando/internal/utils"
 )
 
 type RegisterPeerRequest struct {
@@ -45,24 +46,30 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("[/registerPeer] Invalid request payload")
 		return
 	}
-
-	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(registerRequest.Url)))
+	normalizedUrl, err := utils.NormalizeURL(registerRequest.Url)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Invalid URL"))
+		fmt.Println("[/registerPeer] Invalid URL:", registerRequest.Url)
+		return
+	}
+	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
 	if peers.GetPeerById(urlHash) != nil {
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte("Peer already registered"))
-		fmt.Println("[/registerPeer] Peer already registered with URL:", registerRequest.Url)
+		fmt.Println("[/registerPeer] Peer already registered with URL:", normalizedUrl)
 		return
 	}
 
-	registeredTime := s.utils.TimeNow()
+	registeredTime := utils.TimeNow()
 	peers.RegisterPeer(peers.Peer{
-		Url:       registerRequest.Url,
+		Url:       normalizedUrl,
 		Id:        urlHash,
 		FirstSeen: registeredTime,
 		LastSeen:  registeredTime,
 		Status:    "",
 	})
-	fmt.Println("[/registerPeer] Registered peer:", registerRequest.Url)
+	fmt.Println("[/registerPeer] Registered peer:", normalizedUrl)
 
 	var status string
 	isHealthy := s.peersStore.CheckPeerHealth(urlHash)
@@ -84,7 +91,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(jsonString))
-	fmt.Println("[/registerPeer] Successfully registered peer with URL:", registerRequest.Url)
+	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
 }
 
 func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
@@ -123,11 +130,16 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	for _, peerInfo := range registerRequest.Peers {
-		urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(peerInfo.Url)))
+		normalizedUrl, err := utils.NormalizeURL(peerInfo.Url)
+		if err != nil {
+			fmt.Println("[/registerPeersReceived] Invalid URL:", peerInfo.Url)
+			continue
+		}
+		urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
 		if peers.GetPeerById(urlHash) == nil {
-			registeredTime := s.utils.TimeNow()
+			registeredTime := utils.TimeNow()
 			peers.RegisterPeer(peers.Peer{
-				Url:       peerInfo.Url,
+				Url:       normalizedUrl,
 				Id:        urlHash,
 				FirstSeen: registeredTime,
 				LastSeen:  registeredTime,
@@ -139,7 +151,7 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 			} else {
 				peers.UpdatePeerStatus(urlHash, "unhealthy")
 			}
-			fmt.Println("[/registerPeersReceived] Registered peer:", peerInfo.Url)
+			fmt.Println("[/registerPeersReceived] Registered peer:", normalizedUrl)
 		}
 	}
 

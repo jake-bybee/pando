@@ -3,7 +3,6 @@ package peers
 import (
 	"fmt"
 	"net/http"
-	"pando/internal/utils"
 )
 
 type PeersTable struct {
@@ -20,13 +19,11 @@ type Peer struct {
 var peersTable *PeersTable = initPeersTable()
 
 type Store struct {
-	utils  *utils.Store
 	client *http.Client
 }
 
-func NewStore(utils *utils.Store, client *http.Client) *Store {
+func NewStore(client *http.Client) *Store {
 	return &Store{
-		utils:  utils,
 		client: client,
 	}
 }
@@ -72,7 +69,7 @@ func (s *Store) CheckPeerHealth(peerId string) bool {
 		return false
 	}
 
-	healthUrl := "http://" + peer.Url + "/health"
+	healthUrl := peer.Url + "/health"
 	resp, err := s.client.Get(healthUrl)
 	if err != nil {
 		fmt.Println("Failed to check health for peer:", peerId, "error:", err)

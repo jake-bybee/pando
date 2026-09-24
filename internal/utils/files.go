@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func (u *Store) Unzip(src, dest string) error {
+func Unzip(src, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
@@ -57,7 +57,10 @@ func uniquePath(path string) string {
 	}
 }
 
-func (u *Store) TimeNow() string {
-	loc, _ := time.LoadLocation(u.Timezone)
+func TimeNow() string {
+	if Timezone == "" {
+		fmt.Println("Timezone is not set, defaulting to UTC")
+	}
+	loc, _ := time.LoadLocation(Timezone)
 	return time.Now().In(loc).Format(time.RFC3339)
 }

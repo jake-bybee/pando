@@ -6,19 +6,17 @@ import (
 	"pando/internal/health"
 	"pando/internal/immich"
 	"pando/internal/peers"
-	"pando/internal/utils"
 )
 
 type Server struct {
 	healthStore *health.Store
-	utils       *utils.Store
 	peersStore  *peers.Store
 	immichStore *immich.Store
 }
 
-func NewServer(healthStore *health.Store, utils *utils.Store, peersStore *peers.Store, immichStore *immich.Store) *Server {
+func NewServer(healthStore *health.Store, peersStore *peers.Store, immichStore *immich.Store) *Server {
 
-	return &Server{healthStore: healthStore, utils: utils, peersStore: peersStore, immichStore: immichStore}
+	return &Server{healthStore: healthStore, peersStore: peersStore, immichStore: immichStore}
 }
 
 func (s *Server) Start() error {
