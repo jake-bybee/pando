@@ -20,7 +20,7 @@ type Config struct {
 	TimeZone         string
 }
 
-func LoadEnv() (Config, error) {
+func LoadEnv() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("godotenv error:", err) // print the ACTUAL error
@@ -28,9 +28,9 @@ func LoadEnv() (Config, error) {
 
 	cfg, err := loadFromEnvironment()
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
-	return *cfg, nil
+	return cfg, nil
 }
 
 func loadFromEnvironment() (*Config, error) {

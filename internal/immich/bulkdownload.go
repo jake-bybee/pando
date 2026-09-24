@@ -19,7 +19,7 @@ const MAX_CONCURRENT_DOWNLOADS = 5
 
 type Store struct {
 	client *http.Client
-	config config.Config
+	config *config.Config
 }
 
 type BatchDownloadInfoResponse struct {
@@ -73,7 +73,7 @@ type Chunk struct {
 	TotalSize int64
 }
 
-func NewStore(config config.Config, client *http.Client) *Store {
+func NewStore(config *config.Config, client *http.Client) *Store {
 	return &Store{
 		client: client,
 		config: config,

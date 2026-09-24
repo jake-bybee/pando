@@ -13,7 +13,7 @@ import (
 )
 
 type Store struct {
-	config      config.Config
+	config      *config.Config
 	client      *http.Client
 	immichStore *immich.Store
 	system      *system.Store
@@ -27,7 +27,7 @@ type apiKeyPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-func NewStore(config config.Config, client *http.Client, immichStore *immich.Store) *Store {
+func NewStore(config *config.Config, client *http.Client, immichStore *immich.Store) *Store {
 	systemStore := system.NewStore(config)
 
 	return &Store{

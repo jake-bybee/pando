@@ -8,10 +8,10 @@ import (
 
 // test
 type Store struct {
-	config config.Config
+	config *config.Config
 }
 
-func NewStore(config config.Config) *Store {
+func NewStore(config *config.Config) *Store {
 	return &Store{
 		config: config,
 	}
