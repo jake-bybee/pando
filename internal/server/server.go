@@ -30,6 +30,10 @@ func (s *Server) Start() error {
 		s.RegisterPeerHandler(w, r)
 	})
 
+	http.HandleFunc("/relayPeers", func(w http.ResponseWriter, r *http.Request) {
+		s.RelayPeersHandler(w, r)
+	})
+
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.immichStore.BulkDownload(
 			[]string{

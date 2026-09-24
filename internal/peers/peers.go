@@ -7,7 +7,7 @@ import (
 )
 
 type PeersTable struct {
-	Peers map[string]Peer
+	Peers map[string]*Peer
 }
 type Peer struct {
 	Url       string
@@ -33,26 +33,26 @@ func NewStore(utils *utils.Store, client *http.Client) *Store {
 
 func initPeersTable() *PeersTable {
 	return &PeersTable{
-		Peers: make(map[string]Peer),
+		Peers: make(map[string]*Peer),
 	}
 }
 
-func RegisterPeer(peer Peer) Peer {
-	peersTable.Peers[peer.Id] = peer
+func RegisterPeer(peer Peer) *Peer {
+	peersTable.Peers[peer.Id] = &peer
 	return peersTable.Peers[peer.Id]
 }
 
 func GetAllPeers() []Peer {
 	peers := []Peer{}
 	for _, peer := range peersTable.Peers {
-		peers = append(peers, peer)
+		peers = append(peers, *peer)
 	}
 	return peers
 }
 
 func GetPeerById(peerId string) *Peer {
 	if peer, exists := peersTable.Peers[peerId]; exists {
-		return &peer
+		return peer
 	}
 	return nil
 }

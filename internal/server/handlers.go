@@ -82,3 +82,22 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(jsonString))
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", registerRequest.Url)
 }
+
+func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("[/relayPeers] Received request to relay peers")
+	defer r.Body.Close()
+
+	peersList := peers.GetAllPeers()
+
+	jsonString, err := json.Marshal(peersList)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to serialize peers list"))
+		fmt.Println("[/relayPeers] Failed to serialize peers list:", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(jsonString))
+	fmt.Println("[/relayPeers] Successfully relayed peers list")
+}
