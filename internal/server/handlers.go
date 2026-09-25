@@ -18,17 +18,21 @@ type RegisterPeersReceivedRequest struct {
 	Peers []RegisterPeerRequest `json:"peers"`
 }
 
+func writeJSONResponse(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
 	success := s.healthStore.RunHealthCheck()
 
 	if success {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Server is healthy"))
+		writeJSONResponse(w, http.StatusOK, "Server is healthy")
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Server is unhealthy"))
+		writeJSONResponse(w, http.StatusInternalServerError, "Server is unhealthy")
 	}
 }
 
@@ -41,22 +45,19 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(payload)
 	err := decoder.Decode(&registerRequest)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid request payload"))
+		writeJSONResponse(w, http.StatusBadRequest, "Invalid request payload")
 		fmt.Println("[/registerPeer] Invalid request payload")
 		return
 	}
 	normalizedUrl, err := utils.NormalizeURL(registerRequest.Url)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid URL"))
+		writeJSONResponse(w, http.StatusBadRequest, "Invalid URL")
 		fmt.Println("[/registerPeer] Invalid URL:", registerRequest.Url)
 		return
 	}
 	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
 	if peers.GetPeerById(urlHash) != nil {
-		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte("Peer already registered"))
+		writeJSONResponse(w, http.StatusConflict, "Peer already registered")
 		fmt.Println("[/registerPeer] Peer already registered with URL:", normalizedUrl)
 		return
 	}
@@ -81,16 +82,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 
 	registeredPeer := peers.UpdatePeerStatus(urlHash, status)
 
-	jsonString, err := json.Marshal(registeredPeer)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to serialize registered peer"))
-		fmt.Println("[/registerPeer] Failed to serialize registered peer:", err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(jsonString))
+	writeJSONResponse(w, http.StatusOK, registeredPeer)
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
 }
 
@@ -100,16 +92,7 @@ func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
 
 	peersList := peers.GetAllPeers()
 
-	jsonString, err := json.Marshal(peersList)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to serialize peers list"))
-		fmt.Println("[/relayPeers] Failed to serialize peers list:", err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(jsonString))
+	writeJSONResponse(w, http.StatusOK, peersList)
 	fmt.Println("[/relayPeers] Successfully relayed peers list")
 }
 
@@ -123,8 +106,7 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 	decoder := json.NewDecoder(payload)
 	err := decoder.Decode(&registerRequest)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid request payload"))
+		writeJSONResponse(w, http.StatusBadRequest, "Invalid request payload")
 		fmt.Println("[/registerPeersReceived] Invalid request payload")
 		return
 	}
@@ -155,7 +137,6 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Peers registration processed"))
+	writeJSONResponse(w, http.StatusOK, "Peers registration processed")
 	fmt.Println("[/registerPeersReceived] Successfully processed peers registration")
 }

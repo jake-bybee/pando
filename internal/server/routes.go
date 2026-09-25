@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -23,18 +24,17 @@ func (s *Server) RegisterRoutes() {
 	})
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		data, err := s.immichStore.BulkDownload(
-			[]string{
-
-				"00012798-03fa-478a-a79e-e54641afdfd6",
-				"000212d9-2eb7-41e9-907b-dc819d139e9b",
-				"0002ef04-6445-4440-9c65-61fdc18c352d",
-			},
-		)
+		data, err := s.immichStore.GetServerStatistics()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get file sizes data: %v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to get server statistics: %v", err), http.StatusInternalServerError)
 			return
 		}
-		fmt.Fprintf(w, "File sizes data: %v", data)
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to encode server statistics: %v", err), http.StatusInternalServerError)
+			return
+		}
+
 	})
 }
