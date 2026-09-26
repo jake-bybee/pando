@@ -9,8 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// test
-
 var configVariables *config.Config
 
 func Init(config *config.Config) {
