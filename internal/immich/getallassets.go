@@ -5,9 +5,9 @@ import (
 	"io"
 )
 
-func (s *Store) GetAllAssetIds() ([]string, error) {
+func GetAllAssetIds() ([]string, error) {
 	endpoint := "/api/search/metadata"
-	fullUrl := s.config.ImmichUrl + endpoint
+	fullUrl := config.ImmichUrl + endpoint
 
 	var allIds []string
 	cursor := ""
@@ -22,7 +22,7 @@ func (s *Store) GetAllAssetIds() ([]string, error) {
 		}
 		// omit Filter entirely — no ID constraint means "all assets"
 
-		resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
+		resp, err := ImmichFetcher(fullUrl, "POST", payload)
 		if err != nil {
 			return nil, err
 		}

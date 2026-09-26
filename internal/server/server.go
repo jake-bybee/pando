@@ -16,16 +16,15 @@ type Server struct {
 	envVariables *config.Config
 	healthStore  *health.Store
 	peersStore   *peers.Store
-	immichStore  *immich.Store
 }
 
 func NewServer(envVariables *config.Config, client *http.Client) *Server {
-	immichStore := immich.NewStore(envVariables, client)
-	healthStore := health.NewStore(envVariables, client, immichStore)
+	immich.Init(envVariables, client)
+	healthStore := health.NewStore(envVariables)
 	peersStore := peers.NewStore(client)
 	utils.Init(envVariables.TimeZone)
 
-	return &Server{client: client, envVariables: envVariables, healthStore: healthStore, peersStore: peersStore, immichStore: immichStore}
+	return &Server{client: client, envVariables: envVariables, healthStore: healthStore, peersStore: peersStore}
 }
 
 func (s *Server) Start() error {

@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {
+func ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {
 	var req *http.Request
 	var err error
 	if payload != nil {
@@ -25,9 +25,9 @@ func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*
 		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", s.config.ImmichApiToken)
+	req.Header.Set("x-api-key", config.ImmichApiToken)
 
-	resp, err := s.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request for %s: %v", url, err)
 	}

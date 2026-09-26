@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"pando/internal/config"
 	"pando/internal/immich"
 	"pando/internal/system"
@@ -13,10 +12,7 @@ import (
 )
 
 type Store struct {
-	config      *config.Config
-	client      *http.Client
-	immichStore *immich.Store
-	system      *system.Store
+	config *config.Config
 }
 
 type validateTokenResponse struct {
@@ -27,14 +23,10 @@ type apiKeyPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-func NewStore(config *config.Config, client *http.Client, immichStore *immich.Store) *Store {
-	systemStore := system.NewStore(config)
-
+func NewStore(config *config.Config) *Store {
+	system.Init(config)
 	return &Store{
-		config:      config,
-		client:      client,
-		immichStore: immichStore,
-		system:      systemStore,
+		config: config,
 	}
 }
 
@@ -43,7 +35,7 @@ func (s *Store) RunHealthCheck() bool {
 		log.Printf("%s is not reachable", s.config.ImmichUrl)
 		return false
 	}
-	if err := s.system.SystemHealthCheck(); err != nil {
+	if err := system.SystemHealthCheck(); err != nil {
 		log.Printf("System health check failed: %v", err)
 		return false
 	}
@@ -77,7 +69,7 @@ func (s *Store) immichApiKeyValid() (bool, error) {
 	apiKeyPermissions := "/api/auth/validateToken"
 	fullUrl := s.config.ImmichUrl + apiKeyPermissions
 
-	resp, err := s.immichStore.ImmichFetcher(fullUrl, "POST", nil)
+	resp, err := immich.ImmichFetcher(fullUrl, "POST", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err
@@ -110,7 +102,7 @@ func (s *Store) immichApiKeyPermissionsSufficient() (bool, error) {
 	endpoint := "/api/api-keys/me"
 	fullUrl := s.config.ImmichUrl + endpoint
 
-	resp, err := s.immichStore.ImmichFetcher(fullUrl, "GET", nil)
+	resp, err := immich.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
 		return false, err

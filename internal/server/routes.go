@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"pando/internal/immich"
 )
 
 func (s *Server) RegisterRoutes() {
@@ -24,7 +25,7 @@ func (s *Server) RegisterRoutes() {
 	})
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		data, err := s.immichStore.GetServerStatistics()
+		data, err := immich.GetServerStatistics()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get server statistics: %v", err), http.StatusInternalServerError)
 			return
