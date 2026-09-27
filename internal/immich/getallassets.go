@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+const NUM_ASSETS_PER_PAGE = 500
+
 func GetAllAssetIds() ([]string, error) {
 	endpoint := "/api/search/metadata"
 	fullUrl := config.ImmichUrl + endpoint
@@ -14,7 +16,7 @@ func GetAllAssetIds() ([]string, error) {
 
 	for {
 		payload := Payload{
-			Size:     1000, // page size
+			Size:     NUM_ASSETS_PER_PAGE, // page size
 			WithExif: false,
 		}
 		if cursor != "" {
