@@ -2,51 +2,51 @@ package immich
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
 const NUM_ASSETS_PER_PAGE = 500
 
-func GetAllAssetIds() ([]string, error) {
+func GetChunkAssetIds(cursor string) ([]string, string, error) {
 	endpoint := "/api/search/metadata"
 	fullUrl := config.ImmichUrl + endpoint
 
 	var allIds []string
-	cursor := ""
 
-	for {
-		payload := Payload{
-			Size:     NUM_ASSETS_PER_PAGE, // page size
-			WithExif: false,
-		}
-		if cursor != "" {
-			payload.Cursor = cursor
-		}
-		// omit Filter entirely — no ID constraint means "all assets"
+	payload := Payload{
+		Size:     NUM_ASSETS_PER_PAGE,
+		WithExif: false,
 
-		resp, err := ImmichFetcher(fullUrl, "POST", payload)
-		if err != nil {
-			return nil, err
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, err
-		}
-
-		var result SearchMetadataResponse
-		if err := json.Unmarshal(body, &result); err != nil {
-			return nil, err
-		}
-		for _, item := range result.Assets.Items {
-			allIds = append(allIds, item.AssetId)
-		}
-
-		if result.Assets.NextCursor == nil || *result.Assets.NextCursor == "" {
-			break
-		}
-		cursor = *result.Assets.NextCursor
+		OrderBy: struct {
+			Field     string `json:"field"`
+			Direction string `json:"direction"`
+		}{
+			Field:     "fileCreatedAt",
+			Direction: "asc",
+		},
+		Cursor: cursor,
 	}
 
-	return allIds, nil
+	fmt.Printf("Requesting chunk of asset IDs with payload=%v", payload)
+
+	resp, err := ImmichFetcher(fullUrl, "POST", payload)
+	if err != nil {
+		return nil, "", err
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, "", err
+	}
+
+	var result SearchMetadataResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, "", err
+	}
+	for _, item := range result.Assets.Items {
+		allIds = append(allIds, item.AssetId)
+	}
+
+	return allIds, *result.Assets.NextCursor, nil
 }

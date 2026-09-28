@@ -48,10 +48,13 @@ type FileSizeDataResponse struct {
 	} `json:"exifInfo"`
 }
 type Payload struct {
-	Filter   Filter `json:"filter"`
-	Size     int    `json:"size"`
-	WithExif bool   `json:"withExif"`
-	Cursor   string `json:"cursor,omitempty"`
+	Size     int  `json:"size"`
+	WithExif bool `json:"withExif"`
+	OrderBy  struct {
+		Field     string `json:"field"`
+		Direction string `json:"direction"`
+	} `json:"orderBy,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
 }
 
 type Filter struct {
@@ -102,19 +105,6 @@ func BulkDownload(assetIds []string) (bool, error) {
 
 }
 
-func NewPayload(assetIds []string, size int, withExif bool) Payload {
-	orConditions := make([]OrCondition, len(assetIds))
-	for i, id := range assetIds {
-		orConditions[i] = OrCondition{ID: IDMatch{Eq: id}}
-	}
-
-	return Payload{
-		Filter:   Filter{Or: orConditions},
-		Size:     size,
-		WithExif: withExif,
-	}
-}
-
 func GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
 	endpoint := "/api/search/metadata"
 	fullUrl := config.ImmichUrl + endpoint
@@ -123,7 +113,11 @@ func GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
 	cursor := ""
 
 	for {
-		payload := NewPayload(assetIds, len(assetIds), true)
+		payload := Payload{
+			Size:     len(assetIds),
+			WithExif: true,
+		}
+
 		if cursor != "" {
 			payload.Cursor = cursor
 		}

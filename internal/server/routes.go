@@ -25,7 +25,7 @@ func (s *Server) RegisterRoutes() {
 	})
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		data, err := immich.GetServerStatistics()
+		data, err := immich.PollAssets()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get server statistics: %v", err), http.StatusInternalServerError)
 			return
