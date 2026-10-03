@@ -5,8 +5,6 @@ import (
 	"net/http"
 
 	"pando/internal/config"
-	"pando/internal/health"
-	"pando/internal/immich"
 	"pando/internal/peers"
 	"pando/internal/utils"
 )
@@ -14,24 +12,17 @@ import (
 type Server struct {
 	client       *http.Client
 	envVariables *config.Config
-	healthStore  *health.Store
 	peersStore   *peers.Store
 }
 
 func NewServer(envVariables *config.Config, client *http.Client) *Server {
-	immich.Init(envVariables, client)
-	healthStore := health.NewStore(envVariables)
 	peersStore := peers.NewStore(client)
 	utils.Init(envVariables.TimeZone)
 
-	return &Server{client: client, envVariables: envVariables, healthStore: healthStore, peersStore: peersStore}
+	return &Server{client: client, envVariables: envVariables, peersStore: peersStore}
 }
 
 func (s *Server) Start() error {
-	if !runServerPrecheck(s.healthStore) {
-		return fmt.Errorf("server precheck failed")
-	}
-	fmt.Println("Server precheck passed")
 
 	s.RegisterRoutes()
 

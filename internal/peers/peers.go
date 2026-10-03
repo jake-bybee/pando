@@ -11,6 +11,7 @@ type PeersTable struct {
 	Peers map[string]*Peer
 }
 type Peer struct {
+	Me        bool
 	Url       string
 	Id        string
 	FirstSeen string
@@ -34,6 +35,7 @@ func initPeersTable() *PeersTable {
 	return &PeersTable{
 		Peers: make(map[string]*Peer),
 	}
+
 }
 
 func RegisterPeer(peer Peer) *Peer {

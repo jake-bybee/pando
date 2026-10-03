@@ -1,10 +1,13 @@
 package server
 
-import "pando/internal/health"
+import (
+	"pando/internal/config"
+	"pando/internal/health"
+)
 
-func runServerPrecheck(healthStore *health.Store) bool {
+func runServerPrecheck(envVariables *config.Config) bool {
 
-	healthStatus := healthStore.RunHealthCheck()
+	healthStatus := health.RunHealthCheck(envVariables)
 	return healthStatus
 
 }

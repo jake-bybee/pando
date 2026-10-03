@@ -14,6 +14,7 @@ import (
 type Config struct {
 	ImmichUrl        string
 	ImmichApiToken   string
+	SelfUrl          string
 	MasterPandoPort  string
 	MasterPandoUrl   string
 	BackupFolderPath string
@@ -23,7 +24,7 @@ type Config struct {
 func LoadEnv() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("godotenv error:", err) // print the ACTUAL error
+		log.Println("godotenv error:", err)
 	}
 
 	cfg, err := loadFromEnvironment()
@@ -37,6 +38,7 @@ func loadFromEnvironment() (*Config, error) {
 	config := &Config{
 		ImmichUrl:        os.Getenv("IMMICH_URL"),
 		ImmichApiToken:   os.Getenv("IMMICH_API_TOKEN"),
+		SelfUrl:          os.Getenv("SELF_URL"),
 		MasterPandoPort:  os.Getenv("MASTER_PANDO_PORT"),
 		MasterPandoUrl:   os.Getenv("MASTER_PANDO_URL"),
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
@@ -50,6 +52,14 @@ func loadFromEnvironment() (*Config, error) {
 		config.ImmichUrl, err = utils.NormalizeURL(config.ImmichUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to normalize IMMICH_URL: %v", err)
+		}
+	}
+	if config.SelfUrl == "" {
+		return nil, fmt.Errorf("SELF_URL is not set")
+	} else {
+		config.SelfUrl, err = utils.NormalizeURL(config.SelfUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize SELF_URL: %v", err)
 		}
 	}
 	if config.ImmichApiToken == "" {

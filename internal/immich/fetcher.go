@@ -25,8 +25,8 @@ func ImmichFetcher(url string, method string, payload interface{}) (*http.Respon
 		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", config.ImmichApiToken)
 
+	req.Header.Set("x-api-key", config.ImmichApiToken)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request for %s: %v", url, err)

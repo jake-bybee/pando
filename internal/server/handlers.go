@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"pando/internal/health"
 	"pando/internal/peers"
 	"pando/internal/utils"
 )
@@ -27,7 +28,7 @@ func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
-	success := s.healthStore.RunHealthCheck()
+	success := health.RunHealthCheck(s.envVariables)
 
 	if success {
 		writeJSONResponse(w, http.StatusOK, "Server is healthy")

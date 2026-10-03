@@ -11,10 +11,6 @@ import (
 	"slices"
 )
 
-type Store struct {
-	config *config.Config
-}
-
 type validateTokenResponse struct {
 	AuthStatus bool `json:"authStatus"`
 }
@@ -23,16 +19,9 @@ type apiKeyPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-func NewStore(config *config.Config) *Store {
-	system.Init(config)
-	return &Store{
-		config: config,
-	}
-}
-
-func (s *Store) RunHealthCheck() bool {
-	if !s.isImmichReachable() {
-		log.Printf("%s is not reachable", s.config.ImmichUrl)
+func RunHealthCheck(config *config.Config) bool {
+	if !isImmichReachable(config) {
+		log.Printf("%s is not reachable", config.ImmichUrl)
 		return false
 	}
 	if err := system.SystemHealthCheck(); err != nil {
@@ -43,20 +32,20 @@ func (s *Store) RunHealthCheck() bool {
 	return true
 }
 
-func (s *Store) isImmichReachable() bool {
+func isImmichReachable(config *config.Config) bool {
 
-	valid, err := s.immichApiKeyValid()
+	valid, err := immichApiKeyValid(config)
 	if err != nil {
-		log.Printf("Failed to get API key permissions for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to get API key permissions for %s: %v", config.ImmichUrl, err)
 		return false
 	}
 	if !valid {
 		return false
 	}
 
-	sufficient, err := s.immichApiKeyPermissionsSufficient()
+	sufficient, err := immichApiKeyPermissionsSufficient(config)
 	if err != nil {
-		log.Printf("Failed to get API key permissions for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to get API key permissions for %s: %v", config.ImmichUrl, err)
 		return false
 	}
 	if !sufficient {
@@ -65,69 +54,70 @@ func (s *Store) isImmichReachable() bool {
 	return true
 }
 
-func (s *Store) immichApiKeyValid() (bool, error) {
+func immichApiKeyValid(config *config.Config) (bool, error) {
 	apiKeyPermissions := "/api/auth/validateToken"
-	fullUrl := s.config.ImmichUrl + apiKeyPermissions
+	fullUrl := config.ImmichUrl + apiKeyPermissions
+	log.Printf("Checking if API key for %s is valid", fullUrl)
 
 	resp, err := immich.ImmichFetcher(fullUrl, "POST", nil)
 	if err != nil {
-		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to execute request for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Failed to read response body for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to read response body for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 	var validateResp validateTokenResponse
 	err = json.Unmarshal(body, &validateResp)
 	if err != nil {
-		log.Printf("Failed to unmarshal response body for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to unmarshal response body for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 	if !validateResp.AuthStatus {
-		log.Printf("Invalid API key for %s", s.config.ImmichUrl)
+		log.Printf("Invalid API key for %s", config.ImmichUrl)
 		return false, fmt.Errorf("invalid API key")
 	}
 
-	log.Printf("Api key for %s is valid", s.config.ImmichUrl)
+	log.Printf("API key for %s is valid", config.ImmichUrl)
 
 	return true, nil
 
 }
 
-func (s *Store) immichApiKeyPermissionsSufficient() (bool, error) {
+func immichApiKeyPermissionsSufficient(config *config.Config) (bool, error) {
 	endpoint := "/api/api-keys/me"
-	fullUrl := s.config.ImmichUrl + endpoint
+	fullUrl := config.ImmichUrl + endpoint
 
 	resp, err := immich.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
-		log.Printf("Failed to execute request for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to execute request for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Failed to read response body for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to read response body for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 	var permissionsResp apiKeyPermissionsResponse
 	err = json.Unmarshal(body, &permissionsResp)
 	if err != nil {
-		log.Printf("Failed to unmarshal response body for %s: %v", s.config.ImmichUrl, err)
+		log.Printf("Failed to unmarshal response body for %s: %v", config.ImmichUrl, err)
 		return false, err
 	}
 
 	hasPermissions := checkIfPermissionsSufficient(permissionsResp, []string{""}) // Replace with actual required permissions
 	if !hasPermissions {
-		log.Printf("Insufficient API key permissions for %s", s.config.ImmichUrl)
+		log.Printf("Insufficient API key permissions for %s", config.ImmichUrl)
 		return false, fmt.Errorf("insufficient API key permissions")
 	}
 
-	log.Printf("API key permissions for %s are sufficient", s.config.ImmichUrl)
+	log.Printf("API key permissions for %s are sufficient", config.ImmichUrl)
 
 	return true, nil
 }
