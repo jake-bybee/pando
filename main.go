@@ -45,6 +45,8 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 
-	service.Start()
+	fmt.Println("Starting service...")
+
+	service.NewStore(envVariables, immichStore).Start()
 
 }

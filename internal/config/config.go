@@ -20,6 +20,7 @@ type Config struct {
 	BackupFolderPath string
 	TimeZone         string
 	NumPeers         int
+	NumReplicas      int
 }
 
 func LoadEnv() (*Config, error) {
@@ -45,6 +46,7 @@ func loadFromEnvironment() (*Config, error) {
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
 		TimeZone:         os.Getenv("TIME_ZONE"),
 		NumPeers:         ParseNumPeers(),
+		NumReplicas:      ParseNumReplicas(),
 	}
 
 	var err error
