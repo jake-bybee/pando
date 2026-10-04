@@ -27,6 +27,15 @@ type Peer struct {
 	Status    PeerStatus
 }
 
+type RegisterPeerRequest struct {
+	Id  string `json:"id"`
+	Url string `json:"url"`
+}
+
+type RegisterPeersReceivedRequest struct {
+	Peers []RegisterPeerRequest `json:"peers"`
+}
+
 var peersTable *PeersTable = initPeersTable()
 
 type Store struct {
@@ -107,15 +116,21 @@ func (s *Store) CheckPeerHealth(peerId string) bool {
 
 func (s *Store) RelayNewPeer() {
 	endpoint := "/registerPeersReceived"
-	for _, peer := range GetAllPeers() {
+	peers := GetAllPeers()
+	payload := RegisterPeersReceivedRequest{Peers: make([]RegisterPeerRequest, 0, len(peers))}
+	for _, peer := range peers {
+		payload.Peers = append(payload.Peers, RegisterPeerRequest{Id: peer.Id, Url: peer.Url})
+	}
+	for _, peer := range peers {
 
 		url := peer.Url + endpoint
-		_, err := utils.Fetcher(s.client, url, "POST", map[string]string{}, url)
+		resp, err := utils.Fetcher(s.client, url, "POST", map[string]string{}, payload)
 
 		if err != nil {
 			fmt.Printf("Failed to create request for %s: %v\n", peer.Url, err)
 			continue
 		}
+		resp.Body.Close()
 
 		fmt.Printf("Successfully relayed new peer to %s\n", peer.Url)
 	}

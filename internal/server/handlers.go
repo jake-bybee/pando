@@ -1,22 +1,18 @@
 package server
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"pando/internal/peers"
 	"pando/internal/utils"
+	"strings"
 )
 
-type RegisterPeerRequest struct {
-	Url string `json:"url"`
-}
+type RegisterPeerRequest = peers.RegisterPeerRequest
 
-type RegisterPeersReceivedRequest struct {
-	Peers []RegisterPeerRequest `json:"peers"`
-}
+type RegisterPeersReceivedRequest = peers.RegisterPeersReceivedRequest
 
 func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -49,14 +45,17 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("[/registerPeer] Invalid request payload")
 		return
 	}
+	if strings.TrimSpace(registerRequest.Id) == "" {
+		writeJSONResponse(w, http.StatusBadRequest, "Peer ID is required")
+		return
+	}
 	normalizedUrl, err := utils.NormalizeURL(registerRequest.Url)
 	if err != nil {
 		writeJSONResponse(w, http.StatusBadRequest, "Invalid URL")
 		fmt.Println("[/registerPeer] Invalid URL:", registerRequest.Url)
 		return
 	}
-	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
-	if peers.GetPeerById(urlHash) != nil {
+	if peers.GetPeerById(registerRequest.Id) != nil {
 		writeJSONResponse(w, http.StatusConflict, "Peer already registered")
 		fmt.Println("[/registerPeer] Peer already registered with URL:", normalizedUrl)
 		return
@@ -65,7 +64,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 	registeredTime := s.utilsStore.TimeNow()
 	peers.RegisterPeer(peers.Peer{
 		Url:       normalizedUrl,
-		Id:        urlHash,
+		Id:        registerRequest.Id,
 		FirstSeen: registeredTime,
 		LastSeen:  registeredTime,
 		Status:    "",
@@ -73,14 +72,14 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/registerPeer] Registered peer:", normalizedUrl)
 
 	var status peers.PeerStatus
-	isHealthy := s.peersStore.CheckPeerHealth(urlHash)
+	isHealthy := s.peersStore.CheckPeerHealth(registerRequest.Id)
 	if !isHealthy {
 		status = peers.StatusUnhealthy
 	} else {
 		status = peers.StatusHealthy
 	}
 
-	registeredPeer := peers.UpdatePeerStatus(urlHash, status)
+	registeredPeer := peers.UpdatePeerStatus(registerRequest.Id, status)
 
 	writeJSONResponse(w, http.StatusOK, registeredPeer)
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
@@ -112,29 +111,37 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	for _, peerInfo := range registerRequest.Peers {
+	for index, peerInfo := range registerRequest.Peers {
+		if strings.TrimSpace(peerInfo.Id) == "" {
+			writeJSONResponse(w, http.StatusBadRequest, "Peer ID is required")
+			return
+		}
 		normalizedUrl, err := utils.NormalizeURL(peerInfo.Url)
 		if err != nil {
+			writeJSONResponse(w, http.StatusBadRequest, "Invalid URL")
 			fmt.Println("[/registerPeersReceived] Invalid URL:", peerInfo.Url)
-			continue
+			return
 		}
-		urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
-		if peers.GetPeerById(urlHash) == nil {
+		registerRequest.Peers[index].Url = normalizedUrl
+	}
+
+	for _, peerInfo := range registerRequest.Peers {
+		if peers.GetPeerById(peerInfo.Id) == nil {
 			registeredTime := s.utilsStore.TimeNow()
 			peers.RegisterPeer(peers.Peer{
-				Url:       normalizedUrl,
-				Id:        urlHash,
+				Url:       peerInfo.Url,
+				Id:        peerInfo.Id,
 				FirstSeen: registeredTime,
 				LastSeen:  registeredTime,
 				Status:    "",
 			})
-			isHealthy := s.peersStore.CheckPeerHealth(urlHash)
+			isHealthy := s.peersStore.CheckPeerHealth(peerInfo.Id)
 			if isHealthy {
-				peers.UpdatePeerStatus(urlHash, "healthy")
+				peers.UpdatePeerStatus(peerInfo.Id, peers.StatusHealthy)
 			} else {
-				peers.UpdatePeerStatus(urlHash, "unhealthy")
+				peers.UpdatePeerStatus(peerInfo.Id, peers.StatusUnhealthy)
 			}
-			fmt.Println("[/registerPeersReceived] Registered peer:", normalizedUrl)
+			fmt.Println("[/registerPeersReceived] Registered peer:", peerInfo.Url)
 		}
 	}
 
