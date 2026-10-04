@@ -1,0 +1,11 @@
+[tasks.test]
+run = '''
+go build -o /tmp/pando . || exit 1
+trap 'kill 0' EXIT
+for p in 8080 8081 8082 8083; do
+  mkdir -p /tmp/pando$p
+  SELF_URL=http://localhost:$p LISTEN_PORT=$p MASTER_PANDO_URL=http://localhost:8080 BACKUP_FOLDER_PATH=/tmp/pando$p /tmp/pando 2>&1 | sed -u "s/^/[$p] /" &
+  [ $p = 8080 ] && sleep 1
+done
+wait
+'''

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 
 	"pando/internal/config"
@@ -36,9 +37,20 @@ func NewServer(envVariables *config.Config, client *http.Client, immichStore *im
 }
 
 func (s *Server) Start() error {
-
 	s.RegisterRoutes()
 
-	fmt.Println("Starting server on :8080")
-	return http.ListenAndServe(":8080", nil)
+	addr := ":" + s.envVariables.ListenPort
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Starting server on", addr)
+
+	go func() {
+		if err := s.relayMeToPeer(s.envVariables.MasterPandoUrl, peers.GetMe().Id); err != nil {
+			fmt.Printf("Failed to relay to master peer: %v\n", err)
+		}
+	}()
+
+	return http.Serve(ln, nil)
 }

@@ -21,6 +21,7 @@ type Config struct {
 	TimeZone         string
 	NumPeers         int
 	NumReplicas      int
+	ListenPort       string
 }
 
 func LoadEnv() (*Config, error) {
@@ -47,6 +48,7 @@ func loadFromEnvironment() (*Config, error) {
 		TimeZone:         os.Getenv("TIME_ZONE"),
 		NumPeers:         ParseNumPeers(),
 		NumReplicas:      ParseNumReplicas(),
+		ListenPort:       os.Getenv("LISTEN_PORT"),
 	}
 
 	var err error
@@ -70,9 +72,9 @@ func loadFromEnvironment() (*Config, error) {
 	if config.ImmichApiToken == "" {
 		return nil, fmt.Errorf("IMMICH_API_TOKEN is not set")
 	}
-	if config.MasterPandoPort == "" {
-		log.Println("MASTER_PANDO_PORT is not set, using default 8080")
-		config.MasterPandoPort = "8080" // default port if not set
+	if config.ListenPort == "" {
+		log.Println("LISTEN_PORT is not set, using default 8080")
+		config.ListenPort = "8080" // default port if not set
 	}
 	if config.MasterPandoUrl == "" {
 		masterPandoUrl, err := getMasterPandoUrlFromImmichUrl(config.ImmichUrl, config.MasterPandoPort)

@@ -95,6 +95,18 @@ func UpdatePeerStatus(peerId string, status PeerStatus) *Peer {
 	return nil
 }
 
+func GetMe() *Peer {
+	peersTable.mu.RLock()
+	defer peersTable.mu.RUnlock()
+	for _, peer := range peersTable.Peers {
+		if peer.Me {
+			peerSnapshot := *peer
+			return &peerSnapshot
+		}
+	}
+	return nil
+}
+
 func (s *Store) CheckPeerHealth(peerId string) bool {
 	peer := GetPeerById(peerId)
 	if peer == nil {

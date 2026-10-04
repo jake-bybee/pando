@@ -34,6 +34,8 @@ func (s *Store) Start() {
 
 	fmt.Println("Got assets")
 
+	fmt.Printf("%v, %v, %v ", myId, peerIds, s.config.NumReplicas)
+
 	myPics := WhichPicsAreMine(myId, assetIds, peerIds, s.config.NumReplicas)
 
 	s.immichStore.BulkDownload(myPics)

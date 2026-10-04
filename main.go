@@ -41,12 +41,18 @@ func main() {
 	peers.Me(envVariables.SelfUrl, "healthy", utilsStore, envVariables.BackupFolderPath)
 
 	srv := server.NewServer(envVariables, client, immichStore)
-	if err := srv.Start(); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
+
+	srvErrChannel := make(chan error, 1)
+
+	go func() {
+		srvErrChannel <- srv.Start()
+	}()
 
 	fmt.Println("Starting service...")
 
 	service.NewStore(envVariables, immichStore).Start()
 
+	if err := <-srvErrChannel; err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
