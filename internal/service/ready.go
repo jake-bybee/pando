@@ -5,5 +5,5 @@ import (
 )
 
 func (s *Store) isCanStart() bool {
-	return peers.IsAllPeersActive(s.config.NumPeers)
+	return peers.IsAllPeersActiveAndHealthy(s.config.NumPeers)
 }

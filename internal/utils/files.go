@@ -2,6 +2,9 @@ package utils
 
 import (
 	"archive/zip"
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +12,9 @@ import (
 	"strings"
 	"time"
 )
+
+const CONFIG_FILE_NAME = "config.txt"
+const SETTINGS_FOLDER_NAME = "settings"
 
 type Store struct {
 	timezone string
@@ -71,4 +77,56 @@ func (s *Store) TimeNow() string {
 	}
 	loc, _ := time.LoadLocation(s.timezone)
 	return time.Now().In(loc).Format(time.RFC3339)
+}
+
+func LoadId(backupFolderPath string) (string, error) {
+	filePath := filepath.Join(backupFolderPath, SETTINGS_FOLDER_NAME, CONFIG_FILE_NAME)
+
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	var cfg struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return "", err
+	}
+	if cfg.ID == "" {
+		return "", errors.New("id missing in config file")
+	}
+	return cfg.ID, nil
+}
+
+func WriteId(backupFolderPath, id string) error {
+	filePath := filepath.Join(backupFolderPath, SETTINGS_FOLDER_NAME, CONFIG_FILE_NAME)
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return err
+	}
+
+	cfg := map[string]any{}
+
+	b, err := os.ReadFile(filePath)
+	switch {
+	case err == nil:
+		if len(bytes.TrimSpace(b)) > 0 {
+			if err := json.Unmarshal(b, &cfg); err != nil {
+				return fmt.Errorf("existing config is not valid JSON: %w", err)
+			}
+		}
+	case errors.Is(err, os.ErrNotExist):
+		// no file yet, start with an empty config
+	default:
+		return err
+	}
+
+	cfg["id"] = id
+
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, out, 0o644)
 }

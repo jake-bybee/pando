@@ -1,14 +1,23 @@
 package peers
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"pando/internal/utils"
+
+	"github.com/google/uuid"
 )
 
-func Me(selfUrl string, healthStatus PeerStatus, utilsStore *utils.Store) string {
+func loadOrGenerateId(backupFolderPath string) string {
+	if id, err := utils.LoadId(backupFolderPath); err == nil && id != "" {
+		return id
+	}
+	uuid := uuid.NewString()
+	utils.WriteId(backupFolderPath, uuid)
+	return uuid
+}
 
-	id := fmt.Sprintf("%x", sha256.Sum256([]byte(selfUrl)))
+func Me(selfUrl string, healthStatus PeerStatus, utilsStore *utils.Store, backupFolderPath string) string {
+
+	id := loadOrGenerateId(backupFolderPath)
 	now := utilsStore.TimeNow()
 
 	me := Peer{

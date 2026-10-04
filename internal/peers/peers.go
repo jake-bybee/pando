@@ -121,7 +121,7 @@ func (s *Store) RelayNewPeer() {
 	}
 }
 
-func IsAllPeersActive(numPeers int) bool {
+func IsAllPeersActiveAndHealthy(numPeers int) bool {
 	peers := GetAllPeers()
 
 	if len(peers) != numPeers {

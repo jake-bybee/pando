@@ -38,7 +38,7 @@ func main() {
 		log.Fatalf("Health check failed")
 	}
 	fmt.Println("Health check passed")
-	peers.Me(envVariables.SelfUrl, "healthy", utilsStore)
+	peers.Me(envVariables.SelfUrl, "healthy", utilsStore, envVariables.BackupFolderPath)
 
 	srv := server.NewServer(envVariables, client, immichStore)
 	if err := srv.Start(); err != nil {
