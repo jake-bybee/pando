@@ -17,7 +17,7 @@ func Init(config *config.Config) {
 
 }
 
-func SystemHealthCheck() error {
+func SystemHealthCheck(immichStore *immich.Store) error {
 
 	if configVariables.BackupFolderPath == "" {
 		return fmt.Errorf("backup folder path is not configured")
@@ -26,7 +26,7 @@ func SystemHealthCheck() error {
 		return fmt.Errorf("backup folder path does not exist")
 	}
 
-	if !isSystemStorageSufficient() {
+	if !isSystemStorageSufficient(immichStore) {
 		return fmt.Errorf("system storage is insufficient")
 	}
 	return nil
@@ -48,8 +48,8 @@ func getSystemStorage() (uint64, error) {
 
 	return free, nil
 }
-func isSystemStorageSufficient() bool {
-	user, err := immich.GetUsers()
+func isSystemStorageSufficient(immichStore *immich.Store) bool {
+	user, err := immichStore.GetUsers()
 	if err != nil {
 		return false
 	}

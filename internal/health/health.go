@@ -19,12 +19,12 @@ type apiKeyPermissionsResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
-func RunHealthCheck(config *config.Config) bool {
-	if !isImmichReachable(config) {
+func RunHealthCheck(config *config.Config, immichStore *immich.Store) bool {
+	if !isImmichReachable(config, immichStore) {
 		log.Printf("%s is not reachable", config.ImmichUrl)
 		return false
 	}
-	if err := system.SystemHealthCheck(); err != nil {
+	if err := system.SystemHealthCheck(immichStore); err != nil {
 		log.Printf("System health check failed: %v", err)
 		return false
 	}
@@ -32,9 +32,9 @@ func RunHealthCheck(config *config.Config) bool {
 	return true
 }
 
-func isImmichReachable(config *config.Config) bool {
+func isImmichReachable(config *config.Config, immichStore *immich.Store) bool {
 
-	valid, err := immichApiKeyValid(config)
+	valid, err := immichApiKeyValid(config, immichStore)
 	if err != nil {
 		log.Printf("Failed to get API key permissions for %s: %v", config.ImmichUrl, err)
 		return false
@@ -43,7 +43,7 @@ func isImmichReachable(config *config.Config) bool {
 		return false
 	}
 
-	sufficient, err := immichApiKeyPermissionsSufficient(config)
+	sufficient, err := immichApiKeyPermissionsSufficient(config, immichStore)
 	if err != nil {
 		log.Printf("Failed to get API key permissions for %s: %v", config.ImmichUrl, err)
 		return false
@@ -54,12 +54,12 @@ func isImmichReachable(config *config.Config) bool {
 	return true
 }
 
-func immichApiKeyValid(config *config.Config) (bool, error) {
+func immichApiKeyValid(config *config.Config, immichStore *immich.Store) (bool, error) {
 	apiKeyPermissions := "/api/auth/validateToken"
 	fullUrl := config.ImmichUrl + apiKeyPermissions
 	log.Printf("Checking if API key for %s is valid", fullUrl)
 
-	resp, err := immich.ImmichFetcher(fullUrl, "POST", nil)
+	resp, err := immichStore.ImmichFetcher(fullUrl, "POST", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", config.ImmichUrl, err)
 		return false, err
@@ -88,11 +88,11 @@ func immichApiKeyValid(config *config.Config) (bool, error) {
 
 }
 
-func immichApiKeyPermissionsSufficient(config *config.Config) (bool, error) {
+func immichApiKeyPermissionsSufficient(config *config.Config, immichStore *immich.Store) (bool, error) {
 	endpoint := "/api/api-keys/me"
 	fullUrl := config.ImmichUrl + endpoint
 
-	resp, err := immich.ImmichFetcher(fullUrl, "GET", nil)
+	resp, err := immichStore.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
 		log.Printf("Failed to execute request for %s: %v", config.ImmichUrl, err)
 		return false, err

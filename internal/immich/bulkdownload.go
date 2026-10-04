@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
-	appconfig "pando/internal/config"
 	"pando/internal/utils"
 	"strings"
 	"sync"
@@ -16,9 +14,6 @@ import (
 
 var MAX_DOWNLOAD_BATCH_SIZE_BYTES = int64((1024 * 1024 * 1024) / 5) // 500 MB
 const MAX_CONCURRENT_DOWNLOADS = 5
-
-var client *http.Client
-var config *appconfig.Config
 
 type BatchDownloadInfoResponse struct {
 	TotalSize int64      `json:"totalSize"`
@@ -74,29 +69,24 @@ type Chunk struct {
 	TotalSize int64
 }
 
-func Init(cfg *appconfig.Config, httpClient *http.Client) {
-	config = cfg
-	client = httpClient
-}
-
-func BulkDownload(assetIds []string) (bool, error) {
+func (s *Store) BulkDownload(assetIds []string) (bool, error) {
 	if len(assetIds) == 0 {
 		log.Printf("No asset IDs provided for bulk download")
 		return false, fmt.Errorf("no asset IDs provided for bulk download")
 	}
-	batchInfo, err := getInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: assetIds})
+	batchInfo, err := s.getInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: assetIds})
 	if err != nil {
 		log.Printf("Failed to get batch download info: %v", err)
 		return false, fmt.Errorf("failed to get batch download info: %v", err)
 	}
 
-	chunkedAssetIds, err := getAllDownloadBatches(batchInfo)
+	chunkedAssetIds, err := s.getAllDownloadBatches(batchInfo)
 	if err != nil {
 		log.Printf("Failed to get all download batches: %v", err)
 		return false, fmt.Errorf("failed to get all download batches: %v", err)
 	}
 
-	err = bulkDownloadRoutineSwarm(chunkedAssetIds, config.BackupFolderPath)
+	err = s.bulkDownloadRoutineSwarm(chunkedAssetIds, s.config.BackupFolderPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to download batches: %v", err)
 	}
@@ -105,9 +95,9 @@ func BulkDownload(assetIds []string) (bool, error) {
 
 }
 
-func GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
+func (s *Store) GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
 	endpoint := "/api/search/metadata"
-	fullUrl := config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + endpoint
 
 	var allItems []FileSizeDataResponse
 	cursor := ""
@@ -124,7 +114,7 @@ func GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
 
 		log.Printf("Requesting file sizes data for %v files from %s (cursor=%q)", len(assetIds), fullUrl, cursor)
 
-		resp, err := ImmichFetcher(fullUrl, "POST", payload)
+		resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute request for %s: %v", fullUrl, err)
 		}
@@ -208,7 +198,7 @@ func ChunkAssetsBySize(assets []FileSizeDataResponse) []Chunk {
 	return chunks
 }
 
-func bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
+func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 	var wg sync.WaitGroup
 
 	type errorResult struct {
@@ -225,7 +215,7 @@ func bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 			defer wg.Done()
 			downloadsChannel <- struct{}{}
 			defer func() { <-downloadsChannel }()
-			numFilesDownloaded, err := bulkDownload(chunk, dest)
+			numFilesDownloaded, err := s.bulkDownload(chunk, dest)
 			if err != nil {
 				log.Printf("Failed to bulk download assets %v: %v", chunk.AssetIds, err)
 				errorsChannel <- errorResult{AssetIds: chunk.AssetIds, Err: err}
@@ -242,12 +232,12 @@ func bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 	return nil
 }
 
-func getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
+func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
 	endpoint := "/api/download/info"
-	fullUrl := config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + endpoint
 	log.Printf("Requesting batch download info from %s", endpoint)
 
-	resp, err := ImmichFetcher(fullUrl, "POST", payload)
+	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 	if err != nil {
 		return BatchDownloadInfoResponse{}, fmt.Errorf("failed to execute request for %s: %v", fullUrl, err)
 	}
@@ -267,12 +257,12 @@ func getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInf
 	return batchInfo, nil
 }
 
-func bulkDownload(chunk Chunk, dest string) (int, error) {
+func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	endpoint := "/api/download/archive"
-	fullUrl := config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + endpoint
 
 	log.Printf("Preparing to bulk download %d assets (%s) from %s", len(chunk.AssetIds), formatBytes(chunk.TotalSize), fullUrl)
-	resp, err := ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
+	resp, err := s.ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
 	if err != nil {
 		log.Printf("Failed to execute bulk download request for %s: %v", fullUrl, err)
 		return 0, err
@@ -286,7 +276,7 @@ func bulkDownload(chunk Chunk, dest string) (int, error) {
 	}
 
 	fileName := fmt.Sprintf("%x.zip", sha256.Sum256([]byte(strings.Join(chunk.AssetIds, ","))))
-	filePath := config.BackupFolderPath + fileName
+	filePath := s.config.BackupFolderPath + fileName
 
 	err = os.WriteFile(filePath, body, 0644)
 	if err != nil {
@@ -295,7 +285,7 @@ func bulkDownload(chunk Chunk, dest string) (int, error) {
 	}
 
 	if dest == "" {
-		dest = config.BackupFolderPath
+		dest = s.config.BackupFolderPath
 	}
 
 	err = utils.Unzip(filePath, dest)
@@ -310,13 +300,13 @@ func bulkDownload(chunk Chunk, dest string) (int, error) {
 	return len(chunk.AssetIds), nil
 }
 
-func getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Chunk, error) {
+func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Chunk, error) {
 	var allAssetIds []string
 	for _, archive := range batchInfo.Archives {
 		allAssetIds = append(allAssetIds, archive.AssetIds...)
 	}
 
-	sizesData, err := GetFilesSizesData(allAssetIds)
+	sizesData, err := s.GetFilesSizesData(allAssetIds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get files sizes data: %v", err)
 	}

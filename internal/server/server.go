@@ -5,21 +5,21 @@ import (
 	"net/http"
 
 	"pando/internal/config"
+	"pando/internal/immich"
 	"pando/internal/peers"
-	"pando/internal/utils"
 )
 
 type Server struct {
 	client       *http.Client
 	envVariables *config.Config
 	peersStore   *peers.Store
+	immichStore  *immich.Store
 }
 
-func NewServer(envVariables *config.Config, client *http.Client) *Server {
+func NewServer(envVariables *config.Config, client *http.Client, immichStore *immich.Store) *Server {
 	peersStore := peers.NewStore(client)
-	utils.Init(envVariables.TimeZone)
 
-	return &Server{client: client, envVariables: envVariables, peersStore: peersStore}
+	return &Server{client: client, envVariables: envVariables, peersStore: peersStore, immichStore: immichStore}
 }
 
 func (s *Server) Start() error {

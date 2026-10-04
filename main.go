@@ -12,6 +12,7 @@ import (
 	"pando/internal/peers"
 	"pando/internal/server"
 	"pando/internal/system"
+	"pando/internal/utils"
 )
 
 func main() {
@@ -29,16 +30,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
-	immich.Init(envVariables, client)
+	immichStore := immich.NewStore(envVariables, client)
 	system.Init(envVariables)
+	utils.Init(envVariables.TimeZone)
 
-	if !health.RunHealthCheck(envVariables) {
+	if !health.RunHealthCheck(envVariables, immichStore) {
 		log.Fatalf("Health check failed")
 	}
 	fmt.Println("Health check passed")
 	peers.Me(envVariables.SelfUrl, "healthy")
 
-	server := server.NewServer(envVariables, client)
+	server := server.NewServer(envVariables, client, immichStore)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

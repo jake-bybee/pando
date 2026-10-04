@@ -8,9 +8,9 @@ import (
 
 const NUM_ASSETS_PER_PAGE = 500
 
-func GetChunkAssetIds(cursor string) ([]string, string, error) {
+func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, error) {
 	endpoint := "/api/search/metadata"
-	fullUrl := config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + endpoint
 
 	var allIds []string
 
@@ -30,7 +30,7 @@ func GetChunkAssetIds(cursor string) ([]string, string, error) {
 
 	fmt.Printf("Requesting chunk of asset IDs with payload=%v", payload)
 
-	resp, err := ImmichFetcher(fullUrl, "POST", payload)
+	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 	if err != nil {
 		return nil, "", err
 	}

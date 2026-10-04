@@ -25,11 +25,11 @@ type UserStats struct {
 	QuotaSizeInBytes *int64 `json:"quotaSizeInBytes"`
 }
 
-func GetServerStatistics() (*ServerStatisticsResponse, error) {
+func (s *Store) GetServerStatistics() (*ServerStatisticsResponse, error) {
 	endpoint := "/api/server/statistics"
-	fullUrl := config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + endpoint
 
-	resp, err := ImmichFetcher(fullUrl, "GET", nil)
+	resp, err := s.ImmichFetcher(fullUrl, "GET", nil)
 	if err != nil {
 		return nil, err
 	}

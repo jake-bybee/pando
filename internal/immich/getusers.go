@@ -10,9 +10,9 @@ type User struct {
 	StorageSize       int64  `json:"storageSize"`
 }
 
-func GetUsers() (User, error) {
-	url := config.ImmichUrl + "/api/users/me"
-	resp, err := ImmichFetcher(url, "GET", nil)
+func (s *Store) GetUsers() (User, error) {
+	url := s.config.ImmichUrl + "/api/users/me"
+	resp, err := s.ImmichFetcher(url, "GET", nil)
 	if err != nil {
 		return User{}, err
 	}

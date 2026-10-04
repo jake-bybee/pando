@@ -28,7 +28,7 @@ func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
-	success := health.RunHealthCheck(s.envVariables)
+	success := health.RunHealthCheck(s.envVariables, s.immichStore)
 
 	if success {
 		writeJSONResponse(w, http.StatusOK, "Server is healthy")
@@ -85,6 +85,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 
 	writeJSONResponse(w, http.StatusOK, registeredPeer)
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
+	s.RelayNewPeer()
 }
 
 func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
