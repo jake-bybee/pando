@@ -1,10 +1,9 @@
 package peers
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"pando/internal/utils"
 	"sync"
 )
 
@@ -12,13 +11,20 @@ type PeersTable struct {
 	mu    sync.RWMutex
 	Peers map[string]*Peer
 }
+type PeerStatus string
+
+const (
+	StatusHealthy   PeerStatus = "healthy"
+	StatusUnhealthy PeerStatus = "unhealthy"
+)
+
 type Peer struct {
 	Me        bool
 	Url       string
 	Id        string
 	FirstSeen string
 	LastSeen  string
-	Status    string
+	Status    PeerStatus
 }
 
 var peersTable *PeersTable = initPeersTable()
@@ -68,7 +74,7 @@ func GetPeerById(peerId string) *Peer {
 	return nil
 }
 
-func UpdatePeerStatus(peerId string, status string) *Peer {
+func UpdatePeerStatus(peerId string, status PeerStatus) *Peer {
 	peersTable.mu.Lock()
 	defer peersTable.mu.Unlock()
 	peer := peersTable.Peers[peerId]
@@ -102,24 +108,30 @@ func (s *Store) CheckPeerHealth(peerId string) bool {
 func (s *Store) RelayNewPeer() {
 	endpoint := "/registerPeersReceived"
 	for _, peer := range GetAllPeers() {
+
 		url := peer.Url + endpoint
-		data, err := json.Marshal(url)
+		_, err := utils.Fetcher(s.client, url, "POST", map[string]string{}, url)
 
 		if err != nil {
 			fmt.Printf("Failed to create request for %s: %v\n", peer.Url, err)
-			continue
-		}
-		req, err := http.NewRequest("POST", peer.Url, bytes.NewReader(data))
-		if err != nil {
-			fmt.Printf("Failed to create request for %s: %v\n", peer.Url, err)
-			continue
-		}
-		_, err = s.client.Do(req)
-		if err != nil {
-			fmt.Printf("Failed to relay to %s: %v\n", peer.Url, err)
 			continue
 		}
 
 		fmt.Printf("Successfully relayed new peer to %s\n", peer.Url)
 	}
+}
+
+func IsAllPeersActive(numPeers int) bool {
+	peers := GetAllPeers()
+
+	if len(peers) != numPeers {
+		return false
+	}
+
+	for _, peer := range peers {
+		if peer.Status != StatusHealthy {
+			return false
+		}
+	}
+	return true
 }

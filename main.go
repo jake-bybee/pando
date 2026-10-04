@@ -11,6 +11,7 @@ import (
 	"pando/internal/immich"
 	"pando/internal/peers"
 	"pando/internal/server"
+	"pando/internal/service"
 	"pando/internal/utils"
 )
 
@@ -43,5 +44,7 @@ func main() {
 	if err := srv.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+
+	service.Start()
 
 }

@@ -19,6 +19,7 @@ type Config struct {
 	MasterPandoUrl   string
 	BackupFolderPath string
 	TimeZone         string
+	NumPeers         int
 }
 
 func LoadEnv() (*Config, error) {
@@ -43,9 +44,11 @@ func loadFromEnvironment() (*Config, error) {
 		MasterPandoUrl:   os.Getenv("MASTER_PANDO_URL"),
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
 		TimeZone:         os.Getenv("TIME_ZONE"),
+		NumPeers:         ParseNumPeers(),
 	}
 
 	var err error
+
 	if config.ImmichUrl == "" {
 		return nil, fmt.Errorf("IMMICH_URL is not set")
 	} else {

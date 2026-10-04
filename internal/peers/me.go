@@ -6,7 +6,7 @@ import (
 	"pando/internal/utils"
 )
 
-func Me(selfUrl string, healthStatus string, utilsStore *utils.Store) string {
+func Me(selfUrl string, healthStatus PeerStatus, utilsStore *utils.Store) string {
 
 	id := fmt.Sprintf("%x", sha256.Sum256([]byte(selfUrl)))
 	now := utilsStore.TimeNow()

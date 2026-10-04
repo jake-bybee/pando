@@ -72,19 +72,19 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	fmt.Println("[/registerPeer] Registered peer:", normalizedUrl)
 
-	var status string
+	var status peers.PeerStatus
 	isHealthy := s.peersStore.CheckPeerHealth(urlHash)
 	if !isHealthy {
-		status = "unhealthy"
+		status = peers.StatusUnhealthy
 	} else {
-		status = "healthy"
+		status = peers.StatusHealthy
 	}
 
 	registeredPeer := peers.UpdatePeerStatus(urlHash, status)
 
 	writeJSONResponse(w, http.StatusOK, registeredPeer)
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
-	s.RelayNewPeer()
+	s.peersStore.RelayNewPeer()
 }
 
 func (s *Server) RelayPeersHandler(w http.ResponseWriter, r *http.Request) {
