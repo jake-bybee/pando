@@ -42,18 +42,26 @@ type FileSizeDataResponse struct {
 		FileSizeInByte int64 `json:"fileSizeInByte"`
 	} `json:"exifInfo"`
 }
-type Payload struct {
-	Size     int  `json:"size"`
-	WithExif bool `json:"withExif"`
-	OrderBy  struct {
-		Field     string `json:"field"`
-		Direction string `json:"direction"`
-	} `json:"orderBy,omitempty"`
-	Cursor string `json:"cursor,omitempty"`
+type OrderBy struct {
+	Field     string `json:"field"`
+	Direction string `json:"direction"`
+}
+
+type IDFilter struct {
+	Eq string `json:"eq"`
 }
 
 type Filter struct {
-	Or []OrCondition `json:"or"`
+	ID *IDFilter `json:"id,omitempty"`
+	Or []Filter  `json:"or,omitempty"`
+}
+
+type Payload struct {
+	Size     int      `json:"size"`
+	WithExif bool     `json:"withExif"`
+	OrderBy  *OrderBy `json:"orderBy,omitempty"`
+	Filter   *Filter  `json:"filter,omitempty"`
+	Cursor   string   `json:"cursor,omitempty"`
 }
 
 type OrCondition struct {
@@ -95,52 +103,54 @@ func (s *Store) BulkDownload(assetIds []string) (bool, error) {
 
 }
 
+const sizesBatchSize = 100
+
 func (s *Store) GetFilesSizesData(assetIds []string) ([]FileSizeDataResponse, error) {
-	endpoint := "/api/search/metadata"
-	fullUrl := s.config.ImmichUrl + endpoint
+	fullUrl := s.config.ImmichUrl + "/api/search/metadata"
+	allItems := make([]FileSizeDataResponse, 0, len(assetIds))
 
-	var allItems []FileSizeDataResponse
-	cursor := ""
+	for start := 0; start < len(assetIds); start += sizesBatchSize {
+		end := min(start+sizesBatchSize, len(assetIds))
+		batch := assetIds[start:end]
 
-	for {
-		payload := Payload{
-			Size:     len(assetIds),
-			WithExif: true,
+		or := make([]Filter, 0, len(batch))
+		for _, id := range batch {
+			or = append(or, Filter{ID: &IDFilter{Eq: id}})
 		}
 
-		if cursor != "" {
-			payload.Cursor = cursor
+		cursor := ""
+		for {
+			payload := Payload{
+				Size:     len(batch),
+				WithExif: true,
+				Filter:   &Filter{Or: or},
+				Cursor:   cursor,
+			}
+
+			resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
+			if err != nil {
+				return nil, fmt.Errorf("failed to execute request for %s: %w", fullUrl, err)
+			}
+
+			var parsed SearchMetadataResponse
+			err = json.NewDecoder(resp.Body).Decode(&parsed)
+			resp.Body.Close()
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode response from %s: %w", fullUrl, err)
+			}
+
+			allItems = append(allItems, parsed.Assets.Items...)
+
+			if parsed.Assets.NextCursor == nil || *parsed.Assets.NextCursor == "" {
+				break
+			}
+			cursor = *parsed.Assets.NextCursor
 		}
-
-		log.Printf("Requesting file sizes data for %v files from %s (cursor=%q)", len(assetIds), fullUrl, cursor)
-
-		resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute request for %s: %v", fullUrl, err)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body for %s: %v", fullUrl, err)
-		}
-
-		var searchMetadataResponse SearchMetadataResponse
-		if err := json.Unmarshal(body, &searchMetadataResponse); err != nil {
-			log.Printf("Failed to unmarshal file sizes data for %v files from %s: %v", len(assetIds), fullUrl, err)
-			return nil, fmt.Errorf("failed to unmarshal response body for %s: %v", fullUrl, err)
-		}
-
-		allItems = append(allItems, searchMetadataResponse.Assets.Items...)
-
-		if searchMetadataResponse.Assets.NextCursor == nil || *searchMetadataResponse.Assets.NextCursor == "" {
-			break
-		}
-		cursor = *searchMetadataResponse.Assets.NextCursor
 	}
 
-	log.Printf("Successfully retrieved file sizes data for %v files from %s (%d total items)", len(assetIds), fullUrl, len(allItems))
-
+	if len(allItems) != len(assetIds) {
+		log.Printf("Warning: requested %d assets, got sizes for %d", len(assetIds), len(allItems))
+	}
 	return allItems, nil
 }
 
@@ -217,7 +227,7 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 			defer func() { <-downloadsChannel }()
 			numFilesDownloaded, err := s.bulkDownload(chunk, dest)
 			if err != nil {
-				log.Printf("Failed to bulk download assets %v: %v", chunk.AssetIds, err)
+				log.Printf("Failed to bulk download assets %v", err)
 				errorsChannel <- errorResult{AssetIds: chunk.AssetIds, Err: err}
 			}
 			log.Printf("Successfully downloaded %d files to %s", numFilesDownloaded, dest)

@@ -11,7 +11,6 @@ func WhichPicsAreMine(myId string, assetIds []string, peerIDs []string, replicas
 	myPics := []string{}
 	for _, assetID := range assetIds {
 		storingPeers := whichPeersShouldStore(assetID, peerIDs, replicas)
-
 		if slices.Contains(storingPeers, myId) {
 			myPics = append(myPics, assetID)
 		}

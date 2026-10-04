@@ -24,7 +24,13 @@ func (s *Server) RegisterRoutes() {
 	})
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		data, err := s.immichStore.PollAssets()
+		data, err := s.immichStore.BulkDownload([]string{
+			"87ed1adc-f219-4d5d-9f5b-7e2c413e3d34",
+			"c1a5da5b-d7fe-4e88-9f9b-62cde8306272",
+			"f4654692-4ee7-4c16-bf6f-eaf4b88c87ef",
+			"f2fa941d-d493-47cb-af18-8a3883390203",
+			"728b9f87-73e1-4999-a977-f0d427f37c00",
+		})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get server statistics: %v", err), http.StatusInternalServerError)
 			return

@@ -2,7 +2,6 @@ package immich
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 )
 
@@ -13,22 +12,12 @@ func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, error) {
 	fullUrl := s.config.ImmichUrl + endpoint
 
 	var allIds []string
-
 	payload := Payload{
 		Size:     NUM_ASSETS_PER_PAGE,
 		WithExif: false,
-
-		OrderBy: struct {
-			Field     string `json:"field"`
-			Direction string `json:"direction"`
-		}{
-			Field:     "fileCreatedAt",
-			Direction: "asc",
-		},
-		Cursor: cursor,
+		OrderBy:  &OrderBy{Field: "fileCreatedAt", Direction: "asc"},
+		Cursor:   cursor,
 	}
-
-	fmt.Printf("Requesting chunk of asset IDs with payload=%v", payload)
 
 	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 	if err != nil {

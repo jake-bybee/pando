@@ -3,12 +3,13 @@ package service
 import (
 	"fmt"
 	"pando/internal/peers"
+	"time"
 )
 
 func (s *Store) Start() {
-	// if !s.isCanStart() {
-	// 	return
-	// }
+	if !s.isCanStart() {
+		time.Sleep(2 * time.Second) // pause for a fixed time
+	}
 
 	allPeers := peers.GetAllPeers()
 	peerIds := []string{}
@@ -17,7 +18,7 @@ func (s *Store) Start() {
 	for _, peer := range allPeers {
 		if peer.Me {
 			myId = peer.Id
-			continue
+
 		}
 		peerIds = append(peerIds, peer.Id)
 	}
@@ -31,10 +32,6 @@ func (s *Store) Start() {
 	if errs != nil {
 		fmt.Println("Error polling assets:", errs)
 	}
-
-	fmt.Println("Got assets")
-
-	fmt.Printf("%v, %v, %v ", myId, peerIds, s.config.NumReplicas)
 
 	myPics := WhichPicsAreMine(myId, assetIds, peerIds, s.config.NumReplicas)
 

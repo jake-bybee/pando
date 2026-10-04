@@ -22,5 +22,4 @@ func NewStore(cfg *appconfig.Config, httpClient *http.Client) *Store {
 
 func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {
 	return utils.Fetcher(s.client, url, method, map[string]string{"x-api-key": s.config.ImmichApiToken}, payload)
-
 }
