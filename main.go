@@ -11,17 +11,16 @@ import (
 	"pando/internal/immich"
 	"pando/internal/peers"
 	"pando/internal/server"
-	"pando/internal/system"
 	"pando/internal/utils"
 )
 
 func main() {
-	var transport *http.Transport = &http.Transport{
+	var transport = &http.Transport{
 		IdleConnTimeout:     30 * time.Second,
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 	}
-	var client *http.Client = &http.Client{
+	var client = &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
@@ -31,17 +30,17 @@ func main() {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
 	immichStore := immich.NewStore(envVariables, client)
-	system.Init(envVariables)
-	utils.Init(envVariables.TimeZone)
+	healthStore := health.NewStore(envVariables, immichStore)
+	utilsStore := utils.NewStore(envVariables.TimeZone)
 
-	if !health.RunHealthCheck(envVariables, immichStore) {
+	if !healthStore.RunHealthCheck() {
 		log.Fatalf("Health check failed")
 	}
 	fmt.Println("Health check passed")
-	peers.Me(envVariables.SelfUrl, "healthy")
+	peers.Me(envVariables.SelfUrl, "healthy", utilsStore)
 
-	server := server.NewServer(envVariables, client, immichStore)
-	if err := server.Start(); err != nil {
+	srv := server.NewServer(envVariables, client, immichStore)
+	if err := srv.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 

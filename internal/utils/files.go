@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+type Store struct {
+	timezone string
+}
+
+func NewStore(timezone string) *Store {
+	return &Store{timezone: timezone}
+}
+
 func Unzip(src, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
@@ -57,10 +65,10 @@ func uniquePath(path string) string {
 	}
 }
 
-func TimeNow() string {
-	if Timezone == "" {
+func (s *Store) TimeNow() string {
+	if s.timezone == "" {
 		fmt.Println("Timezone is not set, defaulting to UTC")
 	}
-	loc, _ := time.LoadLocation(Timezone)
+	loc, _ := time.LoadLocation(s.timezone)
 	return time.Now().In(loc).Format(time.RFC3339)
 }

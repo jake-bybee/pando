@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"pando/internal/health"
 	"pando/internal/peers"
 	"pando/internal/utils"
 )
@@ -28,7 +27,7 @@ func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
-	success := health.RunHealthCheck(s.envVariables, s.immichStore)
+	success := s.healthStore.RunHealthCheck()
 
 	if success {
 		writeJSONResponse(w, http.StatusOK, "Server is healthy")
@@ -63,7 +62,7 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registeredTime := utils.TimeNow()
+	registeredTime := s.utilsStore.TimeNow()
 	peers.RegisterPeer(peers.Peer{
 		Url:       normalizedUrl,
 		Id:        urlHash,
@@ -121,7 +120,7 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 		}
 		urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedUrl)))
 		if peers.GetPeerById(urlHash) == nil {
-			registeredTime := utils.TimeNow()
+			registeredTime := s.utilsStore.TimeNow()
 			peers.RegisterPeer(peers.Peer{
 				Url:       normalizedUrl,
 				Id:        urlHash,

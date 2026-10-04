@@ -11,14 +11,6 @@ import (
 	"strings"
 )
 
-var Timezone string
-
-func Init(timezone string) {
-
-	Timezone = timezone
-
-}
-
 func NormalizeURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
