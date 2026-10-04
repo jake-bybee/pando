@@ -272,7 +272,7 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	fullUrl := s.config.ImmichUrl + endpoint
 
 	log.Printf("Preparing to bulk download %d assets (%s) from %s", len(chunk.AssetIds), formatBytes(chunk.TotalSize), fullUrl)
-	resp, err := s.ImmichFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
+	resp, err := s.ImmichDownloadFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
 	if err != nil {
 		log.Printf("Failed to execute bulk download request for %s: %v", fullUrl, err)
 		return 0, err

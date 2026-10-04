@@ -8,16 +8,21 @@ import (
 )
 
 type Store struct {
-	client        *http.Client
-	config        *appconfig.Config
-	currentCursor struct {
+	client         *http.Client
+	downloadClient *http.Client
+	config         *appconfig.Config
+	currentCursor  struct {
 		cursor string
 		mu     sync.Mutex
 	}
 }
 
-func NewStore(cfg *appconfig.Config, httpClient *http.Client) *Store {
-	return &Store{config: cfg, client: httpClient}
+func NewStore(cfg *appconfig.Config, httpClient *http.Client, downloadClient *http.Client) *Store {
+	return &Store{config: cfg, client: httpClient, downloadClient: downloadClient}
+}
+
+func (s *Store) ImmichDownloadFetcher(url string, method string, payload interface{}) (*http.Response, error) {
+	return utils.Fetcher(s.downloadClient, url, method, map[string]string{"x-api-key": s.config.ImmichApiToken}, payload)
 }
 
 func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {

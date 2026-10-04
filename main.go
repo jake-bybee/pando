@@ -25,12 +25,16 @@ func main() {
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
+	var downloadClient = &http.Client{
+		Transport: transport,
+		Timeout:   300 * time.Second,
+	}
 
 	envVariables, err := config.LoadEnv()
 	if err != nil {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
-	immichStore := immich.NewStore(envVariables, client)
+	immichStore := immich.NewStore(envVariables, client, downloadClient)
 	healthStore := health.NewStore(envVariables, immichStore)
 	utilsStore := utils.NewStore(envVariables.TimeZone)
 
