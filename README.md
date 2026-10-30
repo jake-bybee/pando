@@ -24,6 +24,24 @@ Self-hosted apps like Immich and Nextcloud store files locally by default. If th
 - **No manual placement logic** — consistent hashing means every node can independently determine what it should hold, with zero coordination overhead
 - **Self-healing (planned)** — periodic reconciliation will catch anything missed by real-time watching, including recovery after extended node downtime
 
+## Downloaded Asset Manifest
+
+`GET /manifest?limit=100&after=<assetId>` lists assets recorded as downloaded on this node.
+
+```json
+{
+	"items": [
+		{ "assetId": "asset-id-1", "fileName": "photo-one.jpg" }
+	],
+	"total": 1250,
+	"nextCursor": "asset-id-1"
+}
+```
+
+Entries are sorted by asset ID. The optional `limit` defaults to 100 and must be an integer from 1 to 1000. To fetch the next page, pass `nextCursor` as the `after` query parameter; a null cursor means there are no more entries. A missing manifest returns an empty `items` array, a total of 0, and a null cursor.
+
+Invalid limits return HTTP 400, unsupported methods return 405, and manifest read or decoding failures return 500. Each request reads the latest saved manifest, so totals may change between pages as downloads complete; newly added IDs before the cursor will appear on a fresh traversal. Pagination limits response size, but the JSON manifest is still loaded in full for each request. Entries reflect recorded downloads, not a fresh filesystem integrity check.
+
 ## Roadmap
 
 - [x] Design: consistent hashing for file placement

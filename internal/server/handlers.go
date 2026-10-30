@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"pando/internal/peers"
+	"pando/internal/service"
 	"pando/internal/utils"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +20,33 @@ func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func (s *Server) ManifestHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	query := r.URL.Query()
+	limit := service.DefaultManifestLimit
+	if query.Has("limit") {
+		parsedLimit, err := strconv.Atoi(query.Get("limit"))
+		if err != nil || parsedLimit < 1 || parsedLimit > service.MaxManifestLimit {
+			writeJSONResponse(w, http.StatusBadRequest, fmt.Sprintf("limit must be an integer between 1 and %d", service.MaxManifestLimit))
+			return
+		}
+		limit = parsedLimit
+	}
+
+	page, err := service.GetAssetManifestPage(s.envVariables.BackupFolderPath, limit, query.Get("after"))
+	if err != nil {
+		fmt.Printf("[/manifest] Failed to read asset manifest: %v\n", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to read asset manifest")
+		return
+	}
+	writeJSONResponse(w, http.StatusOK, page)
 }
 
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {

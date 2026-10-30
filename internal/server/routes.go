@@ -7,6 +7,8 @@ import (
 )
 
 func (s *Server) RegisterRoutes() {
+	http.HandleFunc("/manifest", s.ManifestHandler)
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		s.HealthHandler(w, r)
 	})

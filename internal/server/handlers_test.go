@@ -5,8 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"pando/internal/config"
 	"pando/internal/peers"
+	"pando/internal/service"
 	"pando/internal/utils"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -106,5 +111,91 @@ func TestBatchRegistrationValidatesBeforeRegistering(t *testing.T) {
 	}
 	if peers.GetPeerById(id) != nil {
 		t.Fatal("invalid batch partially registered a peer")
+	}
+}
+
+func TestManifestEndpoint(t *testing.T) {
+	backupFolder := t.TempDir()
+	settingsFolder := filepath.Join(backupFolder, "settings")
+	if err := os.MkdirAll(settingsFolder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(settingsFolder, "asset-manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"asset-c":"three.jpg","asset-a":"one.jpg","asset-b":"two.jpg"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{envVariables: &config.Config{BackupFolderPath: backupFolder}}
+	originalMux := http.DefaultServeMux
+	http.DefaultServeMux = http.NewServeMux()
+	t.Cleanup(func() { http.DefaultServeMux = originalMux })
+	server.RegisterRoutes()
+
+	for _, test := range []struct {
+		name       string
+		query      string
+		wantIDs    []string
+		nextCursor string
+	}{
+		{"default", "", []string{"asset-a", "asset-b", "asset-c"}, ""},
+		{"first page", "?limit=2", []string{"asset-a", "asset-b"}, "asset-b"},
+		{"last page", "?limit=2&after=asset-b", []string{"asset-c"}, ""},
+		{"past end", "?after=asset-z", []string{}, ""},
+		{"maximum limit", "?limit=1000", []string{"asset-a", "asset-b", "asset-c"}, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest"+test.query, nil))
+			if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/json" {
+				t.Fatalf("response = %d, headers = %v", response.Code, response.Header())
+			}
+			var page service.AssetManifestPage
+			if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			ids := make([]string, 0, len(page.Items))
+			for _, item := range page.Items {
+				ids = append(ids, item.AssetID)
+			}
+			if page.Items == nil || page.Total != 3 || !reflect.DeepEqual(ids, test.wantIDs) {
+				t.Fatalf("page = %+v, want IDs %v and total 3", page, test.wantIDs)
+			}
+			if test.nextCursor == "" {
+				if page.NextCursor != nil {
+					t.Fatalf("next cursor = %q, want nil", *page.NextCursor)
+				}
+			} else if page.NextCursor == nil || *page.NextCursor != test.nextCursor {
+				t.Fatalf("next cursor = %v, want %q", page.NextCursor, test.nextCursor)
+			}
+		})
+	}
+
+	for _, limit := range []string{"", "0", "-1", "1001", "abc", "1.5", "99999999999999999999999999"} {
+		response := httptest.NewRecorder()
+		http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest?limit="+limit, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("limit %q: status = %d, want 400", limit, response.Code)
+		}
+	}
+	response := httptest.NewRecorder()
+	http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/manifest", nil))
+	if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != http.MethodGet {
+		t.Fatalf("POST response = %d, Allow = %q", response.Code, response.Header().Get("Allow"))
+	}
+
+	if err := os.WriteFile(manifestPath, []byte(`invalid JSON`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest", nil))
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("corrupt manifest status = %d, want 500", response.Code)
+	}
+	if err := os.Remove(manifestPath); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest", nil))
+	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"items":[],"total":0,"nextCursor":null}` {
+		t.Fatalf("missing manifest response = %d %s", response.Code, response.Body.String())
 	}
 }
