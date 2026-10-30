@@ -2,24 +2,26 @@ package immich
 
 import (
 	"fmt"
+	"log"
 )
 
-func (s *Store) PollAssets() ([]string, error) {
+func (s *Store) PollAssets() ([]string, bool, error) {
 	s.currentCursor.mu.Lock()
 	defer s.currentCursor.mu.Unlock()
-	assets, nextCursor, err := s.GetChunkAssetIds(s.currentCursor.cursor)
+	assets, nextCursor, scanComplete, err := s.GetChunkAssetIds(s.currentCursor.cursor)
 	if err != nil {
-		fmt.Printf("Polling assets failed due to error %v\n", err)
-		return nil, fmt.Errorf("Polling assets failed due to error %v", err)
-	}
-
-	if nextCursor == "" {
-		fmt.Println("Successfully polled all pictures")
+		return nil, false, fmt.Errorf("polling assets failed: %w", err)
 	}
 
 	s.currentCursor.cursor = nextCursor
 
-	fmt.Printf("Retrieved %d assets with next cursor=%q\n", len(assets), s.currentCursor.cursor)
+	log.Printf("Retrieved %d assets; scan complete=%t", len(assets), scanComplete)
 
-	return assets, nil
+	return assets, scanComplete, nil
+}
+
+func (s *Store) ResetAssetCursor() {
+	s.currentCursor.mu.Lock()
+	defer s.currentCursor.mu.Unlock()
+	s.currentCursor.cursor = ""
 }

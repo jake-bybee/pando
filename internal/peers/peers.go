@@ -152,6 +152,7 @@ func IsAllPeersActiveAndHealthy(numPeers int) bool {
 	peers := GetAllPeers()
 
 	if len(peers) != numPeers {
+		fmt.Printf("Expected %d peers, but found %d\n", numPeers, len(peers))
 		return false
 	}
 

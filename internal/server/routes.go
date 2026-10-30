@@ -25,11 +25,18 @@ func (s *Server) RegisterRoutes() {
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.immichStore.BulkDownload([]string{
-			"87ed1adc-f219-4d5d-9f5b-7e2c413e3d34",
-			"c1a5da5b-d7fe-4e88-9f9b-62cde8306272",
-			"f4654692-4ee7-4c16-bf6f-eaf4b88c87ef",
-			"f2fa941d-d493-47cb-af18-8a3883390203",
-			"728b9f87-73e1-4999-a977-f0d427f37c00",
+
+			"00012798-03fa-478a-a79e-e54641afdfd6",
+			"000212d9-2eb7-41e9-907b-dc819d139e9b",
+			"0002ef04-6445-4440-9c65-61fdc18c352d",
+			"000590ed-3f9c-40ca-a255-94dc56b9ec7f",
+			"00063a38-0e4a-45ba-bf17-a5cfec3261eb",
+			"00082c7a-345d-44aa-b443-52b29feea35e",
+			"0008477c-2c48-40c2-9946-ee9057e31b78",
+			"0008cf23-2a90-4302-847f-621f8ea8fc61",
+			"001071c0-1f0b-4b05-b872-3b88851d6cb1",
+			"00112712-8872-4a69-b0ae-31e409f2437c",
+			"0011411f-f8d8-4404-9b6e-ce3905bff16a",
 		})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get server statistics: %v", err), http.StatusInternalServerError)

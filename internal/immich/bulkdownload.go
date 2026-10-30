@@ -3,6 +3,7 @@ package immich
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -37,8 +38,9 @@ type SearchMetadataResponse struct {
 }
 
 type FileSizeDataResponse struct {
-	AssetId  string `json:"id"`
-	ExifInfo struct {
+	AssetId          string `json:"id"`
+	OriginalFileName string `json:"originalFileName"`
+	ExifInfo         struct {
 		FileSizeInByte int64 `json:"fileSizeInByte"`
 	} `json:"exifInfo"`
 }
@@ -78,28 +80,38 @@ type Chunk struct {
 }
 
 func (s *Store) BulkDownload(assetIds []string) (bool, error) {
+	_, err := s.BulkDownloadWithManifest(assetIds)
+	return err == nil, err
+}
+
+func (s *Store) BulkDownloadWithManifest(assetIds []string) (map[string]string, error) {
 	if len(assetIds) == 0 {
 		log.Printf("No asset IDs provided for bulk download")
-		return false, fmt.Errorf("no asset IDs provided for bulk download")
+		return nil, fmt.Errorf("no asset IDs provided for bulk download")
 	}
 	batchInfo, err := s.getInfoForBatchDownload(BatchDownloadInfoPayload{AssetIds: assetIds})
 	if err != nil {
 		log.Printf("Failed to get batch download info: %v", err)
-		return false, fmt.Errorf("failed to get batch download info: %v", err)
+		return nil, fmt.Errorf("failed to get batch download info: %w", err)
 	}
 
-	chunkedAssetIds, err := s.getAllDownloadBatches(batchInfo)
+	chunkedAssetIds, assetFileNames, err := s.getAllDownloadBatches(batchInfo)
 	if err != nil {
 		log.Printf("Failed to get all download batches: %v", err)
-		return false, fmt.Errorf("failed to get all download batches: %v", err)
+		return nil, fmt.Errorf("failed to get all download batches: %w", err)
+	}
+	for _, assetId := range assetIds {
+		if _, ok := assetFileNames[assetId]; !ok {
+			return nil, fmt.Errorf("no filename metadata found for asset %s", assetId)
+		}
 	}
 
 	err = s.bulkDownloadRoutineSwarm(chunkedAssetIds, s.config.BackupFolderPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to download batches: %v", err)
+		return nil, fmt.Errorf("failed to download batches: %w", err)
 	}
 
-	return true, nil
+	return assetFileNames, nil
 
 }
 
@@ -217,7 +229,7 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 	}
 
 	downloadsChannel := make(chan struct{}, MAX_CONCURRENT_DOWNLOADS)
-	errorsChannel := make(chan errorResult)
+	errorsChannel := make(chan errorResult, len(chunks))
 
 	for _, chunk := range chunks {
 		wg.Add(1)
@@ -229,6 +241,7 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 			if err != nil {
 				log.Printf("Failed to bulk download assets %v", err)
 				errorsChannel <- errorResult{AssetIds: chunk.AssetIds, Err: err}
+				return
 			}
 			log.Printf("Successfully downloaded %d files to %s", numFilesDownloaded, dest)
 
@@ -236,10 +249,12 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 	}
 	wg.Wait()
 	close(errorsChannel)
+	var downloadErrors []error
 	for errResult := range errorsChannel {
 		log.Printf("Error downloading assets %v: %v", errResult.AssetIds, errResult.Err)
+		downloadErrors = append(downloadErrors, fmt.Errorf("assets %v: %w", errResult.AssetIds, errResult.Err))
 	}
-	return nil
+	return errors.Join(downloadErrors...)
 }
 
 func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (BatchDownloadInfoResponse, error) {
@@ -310,7 +325,7 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	return len(chunk.AssetIds), nil
 }
 
-func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Chunk, error) {
+func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Chunk, map[string]string, error) {
 	var allAssetIds []string
 	for _, archive := range batchInfo.Archives {
 		allAssetIds = append(allAssetIds, archive.AssetIds...)
@@ -318,12 +333,17 @@ func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Ch
 
 	sizesData, err := s.GetFilesSizesData(allAssetIds)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get files sizes data: %v", err)
+		return nil, nil, fmt.Errorf("failed to get files sizes data: %w", err)
 	}
 
 	sizeByAssetId := make(map[string]FileSizeDataResponse, len(sizesData))
+	assetFileNames := make(map[string]string, len(sizesData))
 	for _, s := range sizesData {
 		sizeByAssetId[s.AssetId] = s
+		if s.OriginalFileName == "" {
+			return nil, nil, fmt.Errorf("no filename metadata found for asset %s", s.AssetId)
+		}
+		assetFileNames[s.AssetId] = s.OriginalFileName
 	}
 
 	var allChunks []Chunk
@@ -333,7 +353,7 @@ func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Ch
 			if data, ok := sizeByAssetId[id]; ok {
 				archiveAssets = append(archiveAssets, data)
 			} else {
-				log.Printf("Warning: no size data found for asset %s, skipping", id)
+				return nil, nil, fmt.Errorf("no size metadata found for asset %s", id)
 			}
 		}
 
@@ -341,5 +361,5 @@ func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Ch
 		allChunks = append(allChunks, archiveChunks...)
 	}
 
-	return allChunks, nil
+	return allChunks, assetFileNames, nil
 }

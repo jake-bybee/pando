@@ -7,7 +7,7 @@ import (
 
 const NUM_ASSETS_PER_PAGE = 500
 
-func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, error) {
+func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, bool, error) {
 	endpoint := "/api/search/metadata"
 	fullUrl := s.config.ImmichUrl + endpoint
 
@@ -21,21 +21,26 @@ func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, error) {
 
 	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 
 	var result SearchMetadataResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 	for _, item := range result.Assets.Items {
 		allIds = append(allIds, item.AssetId)
 	}
 
-	return allIds, *result.Assets.NextCursor, nil
+	nextCursor := ""
+	if result.Assets.NextCursor != nil {
+		nextCursor = *result.Assets.NextCursor
+	}
+
+	return allIds, nextCursor, nextCursor == "", nil
 }
