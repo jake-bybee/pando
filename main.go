@@ -25,10 +25,12 @@ func main() {
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
-	var downloadClient = &http.Client{
-		Transport: transport,
-		Timeout:   300 * time.Second,
+	downloadTransport := &http.Transport{
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 2 * time.Minute, // server must start responding
+		MaxIdleConnsPerHost:   10,
 	}
+	downloadClient := &http.Client{Transport: downloadTransport} // no Timeout
 
 	envVariables, err := config.LoadEnv()
 	if err != nil {

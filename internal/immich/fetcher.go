@@ -1,6 +1,7 @@
 package immich
 
 import (
+	"context"
 	"net/http"
 	appconfig "pando/internal/config"
 	"pando/internal/utils"
@@ -21,8 +22,8 @@ func NewStore(cfg *appconfig.Config, httpClient *http.Client, downloadClient *ht
 	return &Store{config: cfg, client: httpClient, downloadClient: downloadClient}
 }
 
-func (s *Store) ImmichDownloadFetcher(url string, method string, payload interface{}) (*http.Response, error) {
-	return utils.Fetcher(s.downloadClient, url, method, map[string]string{"x-api-key": s.config.ImmichApiToken}, payload)
+func (s *Store) ImmichDownloadFetcher(ctx context.Context, url string, method string, payload interface{}) (*http.Response, error) {
+	return utils.FetcherWithContext(ctx, s.downloadClient, url, method, map[string]string{"x-api-key": s.config.ImmichApiToken}, payload)
 }
 
 func (s *Store) ImmichFetcher(url string, method string, payload interface{}) (*http.Response, error) {

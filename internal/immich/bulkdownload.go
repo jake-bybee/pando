@@ -1,6 +1,7 @@
 package immich
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"pando/internal/utils"
 	"strings"
 	"sync"
+	"time"
 )
 
 var MAX_DOWNLOAD_BATCH_SIZE_BYTES = int64((1024 * 1024 * 1024) / 5) // 500 MB
@@ -240,7 +242,7 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 			numFilesDownloaded, err := s.bulkDownload(chunk, dest)
 			if err != nil {
 				log.Printf("Failed to bulk download assets %v", err)
-				errorsChannel <- errorResult{AssetIds: chunk.AssetIds, Err: err}
+				errorsChannel <- errorResult{Err: err}
 				return
 			}
 			log.Printf("Successfully downloaded %d files to %s", numFilesDownloaded, dest)
@@ -287,25 +289,29 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	fullUrl := s.config.ImmichUrl + endpoint
 
 	log.Printf("Preparing to bulk download %d assets (%s) from %s", len(chunk.AssetIds), formatBytes(chunk.TotalSize), fullUrl)
-	resp, err := s.ImmichDownloadFetcher(fullUrl, "POST", BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	timer := time.AfterFunc(idleTimeout, cancel) // stop button
+	defer timer.Stop()
+
+	resp, err := s.ImmichDownloadFetcher(ctx, fullUrl, "POST",
+		BatchDownloadInfoPayload{AssetIds: chunk.AssetIds})
 	if err != nil {
-		log.Printf("Failed to execute bulk download request for %s: %v", fullUrl, err)
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Failed to read response body for bulk download request for %s: %v", fullUrl, err)
-		return 0, err
-	}
-
 	fileName := fmt.Sprintf("%x.zip", sha256.Sum256([]byte(strings.Join(chunk.AssetIds, ","))))
 	filePath := s.config.BackupFolderPath + fileName
 
-	err = os.WriteFile(filePath, body, 0644)
+	f, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("Failed to write bulk download file %s: %v", filePath, err)
+		return 0, err
+	}
+	_, err = io.Copy(f, &idleReader{r: resp.Body, t: timer})
+	f.Close()
+	if err != nil {
+		os.Remove(filePath)
 		return 0, err
 	}
 
@@ -362,4 +368,19 @@ func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Ch
 	}
 
 	return allChunks, assetFileNames, nil
+}
+
+const idleTimeout = 2 * time.Minute
+
+type idleReader struct {
+	r io.Reader
+	t *time.Timer
+}
+
+func (i *idleReader) Read(p []byte) (int, error) {
+	n, err := i.r.Read(p)
+	if n > 0 {
+		i.t.Reset(idleTimeout) // data arrived, restart the clock
+	}
+	return n, err
 }

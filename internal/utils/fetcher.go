@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,17 +35,19 @@ func NormalizeURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-func Fetcher(client *http.Client, url string, method string, headers map[string]string, payload interface{}) (*http.Response, error) {
-	var req *http.Request
-	var err error
+func FetcherWithContext(ctx context.Context, client *http.Client, url string, method string, headers map[string]string, payload interface{}) (*http.Response, error) {
+	var body io.Reader
 	if payload != nil {
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload for %s: %v", url, err)
 		}
-		req, err = http.NewRequest(method, url, bytes.NewReader(payloadBytes))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
+		body = bytes.NewReader(payloadBytes)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
 
 	if err != nil {
@@ -67,4 +70,8 @@ func Fetcher(client *http.Client, url string, method string, headers map[string]
 	}
 
 	return resp, nil
+}
+
+func Fetcher(client *http.Client, url string, method string, headers map[string]string, payload interface{}) (*http.Response, error) {
+	return FetcherWithContext(context.Background(), client, url, method, headers, payload)
 }
