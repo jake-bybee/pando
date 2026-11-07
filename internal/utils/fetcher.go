@@ -50,9 +50,6 @@ func FetcherWithContext(ctx context.Context, client *http.Client, url string, me
 		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request for %s: %v", url, err)
-	}
 	req.Header.Set("Content-Type", "application/json")
 	for key, value := range headers {
 		req.Header.Set(key, value)
