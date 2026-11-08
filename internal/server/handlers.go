@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"pando/internal/peers"
 	"pando/internal/service"
 	"pando/internal/utils"
@@ -179,13 +180,77 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) DoesThisNodeHaveImage(w http.ResponseWriter, r *http.Request) {
-
-	exists, assetId := service.FileIsSavedFromOriginalFileName(r.URL.Query().Get("originalFileName"), s.envVariables.BackupFolderPath)
-	fmt.Printf("[/doesThisNodeHaveImage] Checking if this node has image with originalFileName: %s, exists: %v, assetId: %s\n", r.URL.Query().Get("originalFileName"), exists, assetId)
+	assetID := r.URL.Query().Get("assetId")
+	fileName := r.URL.Query().Get("fileName")
+	var exists bool
+	if assetID != "" {
+		exists = service.FileIsSavedFromAssetID(assetID, s.envVariables.BackupFolderPath)
+	} else {
+		exists, assetID = service.FileIsSavedFromOriginalFileName(fileName, s.envVariables.BackupFolderPath)
+	}
+	fmt.Printf("[/doesThisNodeHaveImage] Checking image, exists: %v, assetId: %s\n", exists, assetID)
 	if exists {
-		writeJSONResponse(w, http.StatusOK, map[string]string{"assetId": assetId})
+		writeJSONResponse(w, http.StatusOK, map[string]string{"assetId": assetID})
 	} else {
 		writeJSONResponse(w, http.StatusNotFound, "Image not found")
 	}
 
+}
+
+func (s *Server) WhichNodeHasThisImage(w http.ResponseWriter, r *http.Request) {
+	fileName := r.URL.Query().Get("fileName")
+	assetId := r.URL.Query().Get("assetId")
+
+	resolvedAssetId := assetId
+	if fileName != "" {
+		var err error
+		resolvedAssetId, err = s.immichStore.ResolveFileNameToAssetId(fileName)
+		if err != nil {
+			fmt.Printf("[/whichNodeHasThisImage] Error resolving file name to asset ID: %v\n", err)
+			writeJSONResponse(w, http.StatusInternalServerError, "Error resolving file name to asset ID")
+			return
+		}
+	}
+
+	storingPeerIds := service.WhichPeersShouldStore(resolvedAssetId, peers.GetPeerIds(), s.envVariables.NumReplicas)
+
+	type storingPeer struct {
+		peers.Peer
+		HasImage bool
+	}
+
+	storingPeers := make([]storingPeer, 0, len(storingPeerIds))
+	for _, peerId := range storingPeerIds {
+		peer := peers.GetPeerById(peerId)
+		if peer != nil {
+			peerHasImage := false
+			if peer.Me {
+				peerHasImage = service.FileIsSavedFromAssetID(resolvedAssetId, s.envVariables.BackupFolderPath)
+			} else {
+				peerHasImage = s.peerHasImage(peer.Url, resolvedAssetId)
+			}
+			storingPeers = append(storingPeers, storingPeer{
+				Peer:     *peer,
+				HasImage: peerHasImage,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"assetId":      resolvedAssetId,
+		"storingPeers": storingPeers,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+
+}
+
+func (s *Server) peerHasImage(peerURL, assetID string) bool {
+	requestURL := peerURL + "/doesThisNodeHaveImage?assetId=" + url.QueryEscape(assetID)
+	resp, err := s.client.Get(requestURL)
+	if err != nil {
+		fmt.Printf("Failed to query peer %s for asset %s: %v\n", peerURL, assetID, err)
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }

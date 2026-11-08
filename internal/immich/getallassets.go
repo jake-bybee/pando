@@ -44,3 +44,35 @@ func (s *Store) GetChunkAssetIds(cursor string) ([]string, string, bool, error) 
 
 	return allIds, nextCursor, nextCursor == "", nil
 }
+
+func (s *Store) ResolveFileNameToAssetId(fileName string) (string, error) {
+	endpoint := "/api/search/metadata"
+	fullUrl := s.config.ImmichUrl + endpoint
+
+	payload := Payload{
+		OriginalFileName: fileName,
+		Size:             1,
+	}
+
+	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)
+	if err != nil {
+		return "", err
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if err != nil {
+		return "", err
+	}
+
+	var result SearchMetadataResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if len(result.Assets.Items) > 0 {
+		return result.Assets.Items[0].AssetId, nil
+	}
+
+	return "", nil
+}

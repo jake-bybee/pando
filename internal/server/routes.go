@@ -29,6 +29,10 @@ func (s *Server) RegisterRoutes() {
 		s.DoesThisNodeHaveImage(w, r)
 	})
 
+	http.HandleFunc("/whichNodeHasThisImage", func(w http.ResponseWriter, r *http.Request) {
+		s.WhichNodeHasThisImage(w, r)
+	})
+
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		data, err := s.immichStore.BulkDownload([]string{
 

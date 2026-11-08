@@ -62,11 +62,12 @@ type Filter struct {
 }
 
 type Payload struct {
-	Size     int      `json:"size"`
-	WithExif bool     `json:"withExif"`
-	OrderBy  *OrderBy `json:"orderBy,omitempty"`
-	Filter   *Filter  `json:"filter,omitempty"`
-	Cursor   string   `json:"cursor,omitempty"`
+	Size             int      `json:"size"`
+	WithExif         bool     `json:"withExif"`
+	OrderBy          *OrderBy `json:"orderBy,omitempty"`
+	Filter           *Filter  `json:"filter,omitempty"`
+	Cursor           string   `json:"cursor,omitempty"`
+	OriginalFileName string   `json:"originalFileName,omitempty"`
 }
 
 type OrCondition struct {

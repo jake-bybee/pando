@@ -153,6 +153,24 @@ func FileIsSavedFromOriginalFileName(originalFileName string, backupFolderPath s
 	return false, ""
 }
 
+func FileIsSavedFromAssetID(assetID string, backupFolderPath string) bool {
+	manifest, err := loadAssetManifest(backupFolderPath)
+	if err != nil {
+		return false
+	}
+
+	fileName, exists := manifest[assetID]
+	if !exists {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(backupFolderPath, assetID+filepath.Ext(fileName)))
+	return err == nil
+}
+
+func (s *Store) ResolveFileNameToAssetId(fileName string) (string, error) {
+	return s.immichStore.ResolveFileNameToAssetId(fileName)
+}
+
 func saveAssetManifest(backupFolderPath string, manifest map[string]string) error {
 	path := filepath.Join(backupFolderPath, assetManifestPath)
 	directory := filepath.Dir(path)

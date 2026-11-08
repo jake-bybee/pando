@@ -10,7 +10,7 @@ func WhichPicsAreMine(myId string, assetIds []string, peerIDs []string, replicas
 
 	myPics := []string{}
 	for _, assetID := range assetIds {
-		storingPeers := whichPeersShouldStore(assetID, peerIDs, replicas)
+		storingPeers := WhichPeersShouldStore(assetID, peerIDs, replicas)
 		if slices.Contains(storingPeers, myId) {
 			myPics = append(myPics, assetID)
 		}
@@ -29,7 +29,7 @@ type scored struct {
 	score  uint64
 }
 
-func whichPeersShouldStore(assetID string, peerIDs []string, replicas int) []string {
+func WhichPeersShouldStore(assetID string, peerIDs []string, replicas int) []string {
 	scores := make([]scored, 0, len(peerIDs))
 	for _, id := range peerIDs {
 		scores = append(scores, scored{id, score(assetID, id)})

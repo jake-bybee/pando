@@ -73,6 +73,15 @@ func GetAllPeers() []Peer {
 	return peers
 }
 
+func GetPeerIds() []string {
+	peers := GetAllPeers()
+	peerIds := make([]string, len(peers))
+	for i, peer := range peers {
+		peerIds[i] = peer.Id
+	}
+	return peerIds
+}
+
 func GetPeerById(peerId string) *Peer {
 	peersTable.mu.RLock()
 	defer peersTable.mu.RUnlock()
