@@ -80,6 +80,7 @@ type IDMatch struct {
 type Chunk struct {
 	AssetIds  []string
 	TotalSize int64
+	fileNames map[string]struct{}
 }
 
 func (s *Store) BulkDownload(assetIds []string) (bool, error) {
@@ -190,34 +191,35 @@ func formatBytes(bytes int64) string {
 
 func ChunkAssetsBySize(assets []FileSizeDataResponse) []Chunk {
 	var chunks []Chunk
-	var currentChunk []string
-	var currentSize int64
 
 	for _, asset := range assets {
 		size := asset.ExifInfo.FileSizeInByte
+		added := false
 
-		if size > MAX_DOWNLOAD_BATCH_SIZE_BYTES {
-			if len(currentChunk) > 0 {
-				chunks = append(chunks, Chunk{AssetIds: currentChunk, TotalSize: currentSize})
-				currentChunk = nil
-				currentSize = 0
+		// An oversized asset can never share a chunk, so skip the scan entirely.
+		if size <= MAX_DOWNLOAD_BATCH_SIZE_BYTES {
+			for i := range chunks {
+				if chunks[i].TotalSize+size > MAX_DOWNLOAD_BATCH_SIZE_BYTES {
+					continue
+				}
+				if _, exists := chunks[i].fileNames[asset.OriginalFileName]; exists {
+					continue
+				}
+				chunks[i].AssetIds = append(chunks[i].AssetIds, asset.AssetId)
+				chunks[i].TotalSize += size
+				chunks[i].fileNames[asset.OriginalFileName] = struct{}{}
+				added = true
+				break
 			}
-			chunks = append(chunks, Chunk{AssetIds: []string{asset.AssetId}, TotalSize: size})
-			continue
 		}
 
-		if currentSize+size > MAX_DOWNLOAD_BATCH_SIZE_BYTES {
-			chunks = append(chunks, Chunk{AssetIds: currentChunk, TotalSize: currentSize})
-			currentChunk = nil
-			currentSize = 0
+		if !added {
+			chunks = append(chunks, Chunk{
+				AssetIds:  []string{asset.AssetId},
+				TotalSize: size,
+				fileNames: map[string]struct{}{asset.OriginalFileName: {}},
+			})
 		}
-
-		currentChunk = append(currentChunk, asset.AssetId)
-		currentSize += size
-	}
-
-	if len(currentChunk) > 0 {
-		chunks = append(chunks, Chunk{AssetIds: currentChunk, TotalSize: currentSize})
 	}
 
 	return chunks
