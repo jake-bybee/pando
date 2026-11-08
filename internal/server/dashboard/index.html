@@ -5,89 +5,269 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pando dashboard</title>
 <style>
-:root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f5f6f8; color: #20242a; }
-@media (prefers-color-scheme: dark) { :root { background: #17191c; color: #e8eaed; } }
-body { max-width: 1100px; margin: 0 auto; padding: 1rem; }
-header, .lookup, .node { background: Canvas; border: 1px solid #8885; border-radius: .6rem; padding: 1rem; margin-bottom: 1rem; }
-header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
-button { cursor: pointer; padding: .55rem .8rem; }
-input { width: min(100%, 28rem); padding: .6rem; }
-.nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
-.node { margin: 0; }
-.node-info { white-space: pre-line; }
-.node.warning { border-color: #c58a00; }
-.state-badge { display: inline-block; margin-left: .5rem; padding: .2rem .45rem; border-radius: .35rem; font-size: .8rem; }
-.state-good { background: #d7f3df; color: #176b2c; } .state-warn { background: #fff0c2; color: #805c00; } .state-stopped { background: #ffd9d9; color: #9b1c1c; }
-.details-section { margin-top: .75rem; } .details-section summary { cursor: pointer; }
-.dot { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; background: #888; margin-right: .4rem; }
-.ok { background: #22a447; } .bad { background: #d33; }
-.muted, .error { color: #777; } .error { color: #d33; }
-.bar { height: .65rem; background: #8885; border-radius: 1rem; overflow: hidden; margin-top: .35rem; }
-.fill { height: 100%; background: #22a447; } .fill.low { background: #d33; }
-table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #8885; }
+:root {
+  color-scheme: light dark;
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1c2733; --muted: #5d6b7a; --line: #d8dfe6;
+  --accent: #2f6f8f; --accent-ink: #ffffff;
+  --good: #23824f; --good-bg: #dff3e7; --warn: #9a6700; --warn-bg: #fdf0cc;
+  --bad: #b42318; --bad-bg: #fde4e0; --down: #7b8794; --down-bg: #e6eaee;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111922; --surface: #19232e; --ink: #e6edf3; --muted: #92a1b0; --line: #2b3947;
+    --accent: #6db3d3; --accent-ink: #0d1a22;
+    --good: #4cc38a; --good-bg: #16352a; --warn: #e3b04b; --warn-bg: #3a2f14;
+    --bad: #f4806a; --bad-bg: #3d1f1a; --down: #7d8b99; --down-bg: #263340;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; }
+h1 { margin: 0; font-size: 1.75rem; line-height: 1.1; letter-spacing: -.02em; }
+.sub { margin: .25rem 0 0; color: var(--muted); }
+.top-right { display: flex; align-items: center; gap: .75rem; }
+#updated { color: var(--muted); font-size: .85rem; }
+.btn { font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: .55rem 1rem; cursor: pointer; }
+.btn:disabled { opacity: .6; cursor: default; }
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
+.stat { background: var(--surface); padding: .9rem 1.1rem; }
+.num { font-size: 1.5rem; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.lab { color: var(--muted); font-size: .85rem; }
+
+h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+.nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1rem; }
+.node { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--down); border-radius: var(--radius); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .9rem; min-width: 0; }
+.node.h-ok { border-left-color: var(--good); }
+.node.h-bad { border-left-color: var(--bad); }
+.node.warning { box-shadow: 0 0 0 2px var(--warn); }
+.node-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
+.grow { min-width: 0; }
+.host { font-weight: 650; font-size: 1.05rem; overflow-wrap: anywhere; }
+.nid { font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+.pill, .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; padding: .15rem .55rem; border-radius: 99px; white-space: nowrap; }
+.pill { background: var(--down-bg); color: var(--muted); }
+.badge i, .health i { width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; display: inline-block; }
+.badge.good { background: var(--good-bg); color: var(--good); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.stopped { background: var(--bad-bg); color: var(--bad); }
+.badge.live i { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .badge.live i { animation: none; } }
+.health { display: flex; align-items: center; gap: .4rem; font-size: .88rem; font-weight: 600; margin-top: -.4rem; }
+.health.ok { color: var(--good); } .health.bad { color: var(--bad); } .health.down { color: var(--down); }
+
+.free { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.free small { font-size: .85rem; font-weight: 400; color: var(--muted); }
+.bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: .45rem; }
+.fill { height: 100%; background: var(--accent); border-radius: 99px; }
+.fill.mid { background: var(--warn); } .fill.low { background: var(--bad); }
+
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem 1rem; margin: 0; }
+.facts dt { color: var(--muted); font-size: .8rem; }
+.facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.msg { color: var(--muted); margin: .5rem 0 0; }
+.msg code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: .1rem .35rem; user-select: all; overflow-wrap: anywhere; }
+.err { color: var(--bad); margin: 0; overflow-wrap: anywhere; }
+
+details { border-top: 1px solid var(--line); padding-top: .6rem; }
+details.error { color: var(--bad); }
+summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; gap: .5rem; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: ""; flex: none; width: .4rem; height: .4rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+details[open] > summary::before { transform: rotate(45deg); }
+details p { margin: .5rem 0 0; font-weight: 400; overflow-wrap: anywhere; }
+.kv { margin: .5rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: .25rem 1rem; font-size: .88rem; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem; margin-bottom: 1.5rem; }
+.search { display: flex; flex-wrap: wrap; gap: .5rem; }
+input { flex: 1 1 16rem; font: inherit; padding: .6rem .75rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.table-wrap { overflow-x: auto; margin-top: .75rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-size: .8rem; font-weight: 600; }
+.has { font-weight: 600; } .has.yes { color: var(--good); } .has.no { color: var(--bad); }
 </style>
 </head>
 <body>
-<header><div><h1>Pando</h1><span id="updated" class="muted">Not updated</span></div><button id="refresh">Refresh</button></header>
-<section class="lookup"><h2>Asset lookup</h2><form id="lookup-form"><input id="lookup-input" required placeholder="Asset ID or original filename"><button>Find</button></form><p id="lookup-message" class="muted"></p><div id="lookup-result"></div></section>
-<section><h2>Cluster</h2><div id="nodes" class="nodes"></div></section>
+<div class="wrap">
+  <header class="top">
+    <div><h1>Pando</h1><p class="sub">Photo backup cluster</p></div>
+    <div class="top-right"><span id="updated" aria-live="polite">Not updated yet</span><button id="refresh" class="btn">Refresh</button></div>
+  </header>
+  <section class="panel">
+    <h2>Find a photo</h2>
+    <form id="lookup-form" class="search"><input id="lookup-input" required placeholder="Asset ID or original file name" aria-label="Asset ID or original file name"><button class="btn">Find</button></form>
+    <p id="lookup-message" class="msg"></p>
+    <div id="lookup-result" class="table-wrap"></div>
+  </section>
+  <section id="summary" class="summary" aria-label="Cluster summary"></section>
+  <section><h2>Nodes</h2><div id="nodes" class="nodes"></div></section>
+</div>
 <script>
 const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 const esc = value => String(value ?? "");
 const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-const bytes = value => { const units=["B","KB","MB","GB","TB"]; let n=Number(value)||0,i=0; while(n>=1024&&i<units.length-1){n/=1024;i++;} return `${n.toFixed(i?1:0)} ${units[i]}`; };
-const timeAgo = isoString => {
-  if(!isoString) return "never";
-  const seconds=Math.max(0, Math.floor((Date.now()-new Date(isoString).getTime())/1000));
-  if(seconds<60) return `${seconds}s ago`;
-  const minutes=Math.floor(seconds/60); if(minutes<60) return `${minutes}m ago`;
-  const hours=Math.floor(minutes/60); if(hours<24) return `${hours}h ago`;
-  return `${Math.floor(hours/24)}d ago`;
+const bytes = value => { const units = ["B", "KB", "MB", "GB", "TB"]; let n = Number(value) || 0, i = 0; while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${units[i]}`; };
+const timeAgo = iso => {
+  if (!iso) return "never";
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 };
-const uptime = seconds => { let n=Math.max(0,Number(seconds)||0), d=Math.floor(n/86400); n%=86400; const h=Math.floor(n/3600); n%=3600; const m=Math.floor(n/60); return `${d?d+"d ":""}${h? h+"h ":""}${m||!d&&!h?m+"m":""}`.trim(); };
-const stateLabel = state => ({waiting_for_peers:"Waiting for peers",waiting_for_disk:"Waiting for disk"}[state] || (state||"Unknown").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()));
+const since = iso => timeAgo(iso).replace(" ago", "");
+const uptime = seconds => { let n = Math.max(0, Number(seconds) || 0); const d = Math.floor(n / 86400); n %= 86400; const h = Math.floor(n / 3600), m = Math.floor(n % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
+const host = url => esc(url).replace(/^https?:\/\//, "").replace(/\/$/, "") || "unknown";
+const stateLabel = state => ({ waiting_for_peers: "Waiting for peers", waiting_for_disk: "Waiting for disk" }[state] || (state || "Unknown").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase()));
+const stateClass = state => state === "stopped" ? "stopped" : ["waiting_for_peers", "waiting_for_disk", "starting"].includes(state) ? "warn" : "good";
+
 const detailsState = {};
 const rememberDetails = () => $("nodes").querySelectorAll("article[data-node-id]").forEach(card => {
-  const id=card.dataset.nodeId;
-  card.querySelectorAll("details[data-section]").forEach(section => { detailsState[`${id}:${section.dataset.section}`]=section.open; });
+  card.querySelectorAll("details[data-section]").forEach(d => { detailsState[`${card.dataset.nodeId}:${d.dataset.section}`] = d.open; });
 });
+
+let firstLoad = true;
 async function refresh() {
-  rememberDetails();
-  $("nodes").textContent = "Loading...";
-  try { const r=await fetch("/cluster/status"); if(!r.ok) throw Error(`HTTP ${r.status}`); renderCluster(await r.json()); $("updated").textContent=`Last updated ${new Date().toLocaleTimeString()}`; }
-  catch(e) { $("nodes").textContent="Unable to load cluster status."; $("updated").textContent=esc(e.message); }
+  const btn = $("refresh"); btn.disabled = true; btn.textContent = "Refreshing";
+  if (firstLoad) $("nodes").textContent = "Loading…";
+  try {
+    const r = await fetch("/cluster/status");
+    if (!r.ok) throw Error(`HTTP ${r.status}`);
+    renderCluster(await r.json());
+    firstLoad = false;
+    $("updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    if (firstLoad) $("nodes").textContent = "Could not load cluster status.";
+    $("updated").textContent = `Update failed: ${esc(e.message)}`;
+  } finally { btn.disabled = false; btn.textContent = "Refresh"; }
 }
-function renderCluster(data) {
-  const root=$("nodes");
-  rememberDetails();
-  root.textContent="";
-  (data.nodes||[]).forEach(n => {
-    const id=esc(n.id||"unknown"), card=document.createElement("article"); card.className="node"; card.dataset.nodeId=id;
-    const status=n.status;
-    if(status&&(status.state==="waiting_for_disk"||status.state==="stopped")) card.classList.add("warning");
-    const title=document.createElement("h3"); const dot=document.createElement("span"); dot.className=`dot ${n.reachable&&n.healthy?"ok":n.reachable?"bad":""}`; title.append(dot, document.createTextNode(`URL: ${esc(n.url||"unknown")}`));
-    if(n.me) { const badge=document.createElement("small"); badge.textContent=" this node"; title.append(" ",badge); }
-    if(status) { const state=document.createElement("span"); state.className=`state-badge ${status.state==="stopped"?"state-stopped":["waiting_for_peers","waiting_for_disk","starting"].includes(status.state)?"state-warn":"state-good"}`; state.textContent=`${stateLabel(status.state)} for ${timeAgo(status.stateSince)}`; title.append(state); }
-    card.append(title);
-    const info=document.createElement("p"); info.className="node-info"; info.textContent=`ID: ${esc(n.id||"unknown")}\nPhotos: ${n.photoCount||0}\nLast seen: ${esc(n.lastSeen||"unknown")}`; card.append(info);
-    if(n.storage) { const free=Number(n.storage.freeBytes), total=Number(n.storage.totalBytes), pct=total?free/total*100:0; const storage=document.createElement("div"); storage.textContent=`Free ${bytes(free)} of ${bytes(total)} (${pct.toFixed(1)}%)`; const bar=document.createElement("div"); bar.className="bar"; const fill=document.createElement("div"); fill.className=`fill ${pct<10?"low":""}`; fill.style.width=`${Math.max(0,Math.min(100,pct))}%`; bar.append(fill); storage.append(bar); card.append(storage); }
-    const health=document.createElement("p"); health.textContent=`Health: ${n.healthy?"healthy":n.reachable?"unhealthy":"unreachable"}`; card.append(health);
-    (n.errors||[]).forEach(e=>{const p=document.createElement("p");p.className="error";p.textContent=e;card.append(p);}); root.append(card);
-    if(!status) { const unavailable=document.createElement("p"); unavailable.className="muted"; unavailable.textContent="Status unavailable"; if(n.statusError) unavailable.append(document.createTextNode(`: ${esc(n.statusError)}`)); card.append(unavailable); return; }
-    const timing=document.createElement("p"); timing.className="node-info"; timing.textContent=`Last scan: ${timeAgo(status.lastScanCompleted)}\nLast download: ${timeAgo(status.lastSuccessfulDownload)}\nUp: ${uptime(status.uptimeSeconds)}`; card.append(timing);
-    const version=document.createElement("small"); version.className="muted"; version.textContent=`Version: ${esc(status.version||"unknown")}`; card.append(version);
-    if(status.lastError) { const errorDetails=document.createElement("details"); errorDetails.className="details-section error"; errorDetails.dataset.section="error"; errorDetails.open=detailsState[`${id}:error`]||false; const summary=document.createElement("summary"); summary.textContent=`${esc(status.lastError.source)}: ${esc(status.lastError.message).slice(0,80)}`; errorDetails.append(summary); const errorText=document.createElement("p"); errorText.textContent=`${esc(status.lastError.message)} (${timeAgo(status.lastError.at)})`; errorDetails.append(errorText); card.append(errorDetails); }
-    const settings=status.settings||{}, settingsDetails=document.createElement("details"); settingsDetails.className="details-section"; settingsDetails.dataset.section="settings"; settingsDetails.open=detailsState[`${id}:settings`]||false; const settingsSummary=document.createElement("summary"); settingsSummary.textContent="Settings"; settingsDetails.append(settingsSummary);
-    const settingsText=document.createElement("p"); settingsText.className="node-info"; settingsText.textContent=`Replicas: ${esc(settings.replicas)}\nExpected peers: ${esc(settings.expectedPeers)}\nPort: ${esc(settings.listenPort)}\nImmich URL: ${esc(settings.immichUrl)}`; if(settings.minFreeBytes!==undefined) settingsText.textContent+=`\nMin free space: ${bytes(settings.minFreeBytes)}`; if(settings.storageRecheckSeconds!==undefined) settingsText.textContent+=`\nStorage recheck: ${esc(settings.storageRecheckSeconds)}s`; settingsDetails.append(settingsText); card.append(settingsDetails);
+
+function renderSummary(nodes) {
+  const healthy = nodes.filter(n => n.reachable && n.healthy).length;
+  const photos = nodes.reduce((a, n) => a + (Number(n.photoCount) || 0), 0);
+  const free = nodes.reduce((a, n) => a + (n.storage ? Number(n.storage.freeBytes) || 0 : 0), 0);
+  const busy = nodes.filter(n => n.status && n.status.state === "downloading").length;
+  const root = $("summary"); root.replaceChildren();
+  [[`${healthy} of ${nodes.length}`, "Nodes healthy"], [photos.toLocaleString(), "Photo copies saved"], [bytes(free), "Free space, all nodes"], [String(busy), "Downloading now"]].forEach(([value, label]) => {
+    const s = el("div", "stat"); s.append(el("div", "num", value), el("div", "lab", label)); root.append(s);
   });
 }
-async function lookup(event) {
-  event.preventDefault(); const value=$("lookup-input").value.trim(); $("lookup-message").textContent="Looking up..."; $("lookup-result").textContent="";
-  if(!value)return;
-  try { const r=await fetch(`/whichNodeHasThisImage?${uuid(value)?"assetId":"fileName"}=${encodeURIComponent(value)}`); if(r.status===404){$("lookup-message").textContent="Image not found.";return;} if(!r.ok){$("lookup-message").textContent="Immich is unreachable or lookup failed.";return;} const data=await r.json(); $("lookup-message").textContent=`Resolved asset ID: ${esc(data.assetId)}. File names are not unique in Immich.`; const table=document.createElement("table"); const head=document.createElement("tr"); ["URL","Node","Should store","Has it"].forEach(x=>{const th=document.createElement("th");th.textContent=x;head.append(th);}); table.append(head); (data.storingPeers||[]).forEach(p=>{const row=document.createElement("tr");[esc(p.Url||p.url||"unknown"), String(p.Id||"").slice(0,12), "Yes", p.HasImage?"✓":"✗"].forEach(x=>{const td=document.createElement("td");td.textContent=x;row.append(td);});table.append(row);}); $("lookup-result").append(table); }
-  catch(e){$("lookup-message").textContent="Lookup failed."; }
+
+function fact(list, label, value) { const d = el("div"); d.append(el("dt", "", label), el("dd", "", value)); list.append(d); }
+
+function nodeCard(n) {
+  const id = esc(n.id || "unknown"), st = n.status;
+  const hk = !n.reachable ? "down" : n.healthy ? "ok" : "bad";
+  const card = el("article", `node h-${hk}`); card.dataset.nodeId = id;
+  if (st && ["waiting_for_disk", "stopped"].includes(st.state)) card.classList.add("warning");
+
+  const head = el("div", "node-head"), left = el("div", "grow");
+  left.append(el("div", "host", host(n.url)));
+  const nid = el("div", "nid", id); nid.title = id; left.append(nid);
+  const badges = el("div", "badges");
+  if (n.me) badges.append(el("span", "pill", "This node"));
+  if (st) {
+    const b = el("span", `badge ${stateClass(st.state)}${st.state === "downloading" ? " live" : ""}`);
+    b.append(el("i"), document.createTextNode(stateLabel(st.state)));
+    b.title = `In this state for ${since(st.stateSince)}`;
+    badges.append(b);
+  }
+  head.append(left, badges); card.append(head);
+
+  const health = el("div", `health ${hk}`);
+  health.append(el("i"), document.createTextNode(n.healthy ? "Healthy" : n.reachable ? "Unhealthy" : "Unreachable"));
+  card.append(health);
+
+  if (n.storage) {
+    const free = Number(n.storage.freeBytes), total = Number(n.storage.totalBytes), pct = total ? free / total * 100 : 0;
+    const box = el("div"), big = el("div", "free", bytes(free));
+    big.append(el("small", "", ` free of ${bytes(total)} (${pct.toFixed(1)}%)`));
+    const bar = el("div", "bar"), fill = el("div", `fill ${pct < 10 ? "low" : pct < 25 ? "mid" : ""}`);
+    fill.style.width = `${Math.max(0, Math.min(100, 100 - pct))}%`;
+    bar.append(fill); box.append(big, bar); card.append(box);
+  } else card.append(el("p", "msg", "Storage unavailable"));
+
+  const facts = el("dl", "facts");
+  fact(facts, "Photos", String(n.photoCount || 0));
+  if (st) {
+    fact(facts, "Up for", uptime(st.uptimeSeconds));
+    fact(facts, "Last scan", timeAgo(st.lastScanCompleted));
+    fact(facts, "Last download", timeAgo(st.lastSuccessfulDownload));
+    fact(facts, "In this state", since(st.stateSince));
+    fact(facts, "Version", esc(st.version || "unknown"));
+  } else fact(facts, "Last seen", esc(n.lastSeen || "unknown"));
+  card.append(facts);
+
+  (n.errors || []).forEach(e => card.append(el("p", "err", e)));
+  if (!st) {
+    card.append(el("p", "msg", n.statusError ? `Status unavailable: ${esc(n.statusError)}` : "Status unavailable"));
+    return card;
+  }
+
+  if (st.lastError) {
+    const d = el("details", "error"); d.dataset.section = "error"; d.open = !!detailsState[`${id}:error`];
+    d.append(el("summary", "", `${esc(st.lastError.source)}: ${esc(st.lastError.message).slice(0, 80)}`));
+    d.append(el("p", "", `${esc(st.lastError.message)} (${timeAgo(st.lastError.at)})`));
+    card.append(d);
+  }
+
+  const s = st.settings || {}, d = el("details"); d.dataset.section = "settings"; d.open = !!detailsState[`${id}:settings`];
+  d.append(el("summary", "", "Settings"));
+  const kv = el("dl", "kv");
+  const rows = [["Replicas", s.replicas], ["Expected peers", s.expectedPeers], ["Port", s.listenPort], ["Immich URL", s.immichUrl]];
+  if (s.minFreeBytes !== undefined) rows.push(["Min free space", bytes(s.minFreeBytes)]);
+  if (s.storageRecheckSeconds !== undefined) rows.push(["Storage recheck", `${esc(s.storageRecheckSeconds)}s`]);
+  rows.forEach(([k, v]) => kv.append(el("dt", "", k), el("dd", "", esc(v))));
+  d.append(kv); card.append(d);
+  return card;
 }
-$("refresh").addEventListener("click", refresh); $("lookup-form").addEventListener("submit", lookup); refresh(); setInterval(refresh,30000);
+
+function renderCluster(data) {
+  rememberDetails();
+  const nodes = data.nodes || [], root = $("nodes");
+  renderSummary(nodes);
+  root.replaceChildren();
+  if (!nodes.length) { root.append(el("p", "msg", "No nodes found yet.")); return; }
+  nodes.forEach(n => root.append(nodeCard(n)));
+}
+
+async function lookup(event) {
+  event.preventDefault();
+  const value = $("lookup-input").value.trim(), msg = $("lookup-message"), out = $("lookup-result");
+  out.replaceChildren(); if (!value) return;
+  msg.textContent = "Looking up…";
+  try {
+    const r = await fetch(`/whichNodeHasThisImage?${uuid(value) ? "assetId" : "fileName"}=${encodeURIComponent(value)}`);
+    if (r.status === 404) { msg.textContent = uuid(value) ? "Immich does not recognize that asset ID." : "No photo with that file name was found in Immich."; return; }
+    if (r.status === 502) { msg.textContent = "Could not reach Immich. Try again in a moment."; return; }
+    if (!r.ok) { msg.textContent = "Immich is unreachable or the lookup failed."; return; }
+    const data = await r.json();
+    msg.replaceChildren(document.createTextNode("Resolved asset ID: "), el("code", "", esc(data.assetId)), document.createTextNode(". File names are not unique in Immich."));
+    const table = el("table"), head = el("tr");
+    ["URL", "Node", "Should store", "Has it"].forEach(x => head.append(el("th", "", x)));
+    table.append(head);
+    (data.storingPeers || []).forEach(p => {
+      const row = el("tr");
+      [esc(p.Url || p.url || "unknown"), String(p.Id || "").slice(0, 12), "Yes"].forEach(x => row.append(el("td", "", x)));
+      const has = el("td", `has ${p.HasImage ? "yes" : "no"}`, p.HasImage ? "✓ Has it" : "✗ Missing"); row.append(has);
+      table.append(row);
+    });
+    out.append(table);
+  } catch (e) { msg.textContent = "Lookup failed."; }
+}
+
+$("refresh").addEventListener("click", refresh);
+$("lookup-form").addEventListener("submit", lookup);
+refresh(); setInterval(refresh, 30000);
 </script>
 </body>
 </html>

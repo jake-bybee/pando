@@ -1,6 +1,7 @@
 package service
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"pando/internal/immich"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -102,21 +104,21 @@ func TestGetAssetManifestPageInvalidLimit(t *testing.T) {
 
 func TestInitializeAssetManifestReconcilesFilesAndMetadata(t *testing.T) {
 	backupFolder := t.TempDir()
-	for _, fileName := range []string{"asset-one.jpg", "asset-two.png"} {
+	for _, fileName := range []string{"550e8400-e29b-41d4-a716-446655440000.jpg", "550e8400-e29b-41d4-a716-446655440001.png"} {
 		if err := os.WriteFile(filepath.Join(backupFolder, fileName), []byte("asset"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := saveAssetManifest(backupFolder, map[string]string{
-		"asset-two":   "old-two.png",
-		"asset-three": "missing.jpg",
+		"550e8400-e29b-41d4-a716-446655440001": "old-two.png",
+		"550e8400-e29b-41d4-a716-446655440002": "missing.jpg",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	immichServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"assets":{"items":[{"id":"asset-one","originalFileName":"one.jpg","exifInfo":{"fileSizeInByte":1}}]}}`))
+		_, _ = w.Write([]byte(`{"assets":{"items":[{"id":"550e8400-e29b-41d4-a716-446655440000","originalFileName":"one.jpg","exifInfo":{"fileSizeInByte":1}}]}}`))
 	}))
 	defer immichServer.Close()
 
@@ -128,10 +130,39 @@ func TestInitializeAssetManifestReconcilesFilesAndMetadata(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"asset-one": "one.jpg",
-		"asset-two": "old-two.png",
+		"550e8400-e29b-41d4-a716-446655440000": "one.jpg",
+		"550e8400-e29b-41d4-a716-446655440001": "old-two.png",
 	}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("manifest = %#v, want %#v", got, want)
+	}
+}
+
+func TestInitializeAssetManifestSkipsNonAssetFiles(t *testing.T) {
+	backupFolder := t.TempDir()
+	validID := "550e8400-e29b-41d4-a716-446655440000"
+	for _, fileName := range []string{validID + ".jpg", "IMG_0001.jpg", strings.Repeat("a", 64) + ".zip", ".DS_Store"} {
+		if err := os.WriteFile(filepath.Join(backupFolder, fileName), []byte("asset"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	immichServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), validID) || strings.Contains(string(body), "IMG_0001") || strings.Contains(string(body), strings.Repeat("a", 64)) {
+			t.Fatalf("metadata request body = %s", body)
+		}
+		_, _ = w.Write([]byte(`{"assets":{"items":[{"id":"550e8400-e29b-41d4-a716-446655440000","originalFileName":"photo.jpg"}]}}`))
+	}))
+	defer immichServer.Close()
+
+	cfg := &config.Config{BackupFolderPath: backupFolder, ImmichUrl: immichServer.URL}
+	store := NewStore(cfg, immich.NewStore(cfg, immichServer.Client(), immichServer.Client()))
+	if _, err := store.initializeAssetManifest(); err != nil {
+		t.Fatalf("initializeAssetManifest() error = %v", err)
 	}
 }

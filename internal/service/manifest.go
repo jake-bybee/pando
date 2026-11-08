@@ -4,12 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 )
 
 const assetManifestPath = "settings/asset-manifest.json"
+
+var assetIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 const DefaultManifestLimit = 100
 const MaxManifestLimit = 1000
@@ -68,14 +73,20 @@ func (s *Store) initializeAssetManifest() (map[string]string, error) {
 	}
 
 	assetFiles := make(map[string]string)
+	skippedFiles := make([]string, 0)
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
 		assetID := assetIDFromFileName(file.Name())
-		if assetID != "" {
-			assetFiles[assetID] = file.Name()
+		if !assetIDPattern.MatchString(assetID) {
+			skippedFiles = append(skippedFiles, file.Name())
+			continue
 		}
+		assetFiles[assetID] = file.Name()
+	}
+	if len(skippedFiles) > 0 {
+		log.Printf("Skipped %d files in backup folder that are not asset files (e.g. %s)", len(skippedFiles), strings.Join(skippedFiles[:min(5, len(skippedFiles))], ", "))
 	}
 
 	for assetID := range manifest {

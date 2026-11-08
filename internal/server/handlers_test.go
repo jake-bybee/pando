@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"pando/internal/config"
+	"pando/internal/immich"
 	"pando/internal/peers"
 	"pando/internal/service"
 	"pando/internal/status"
@@ -112,6 +113,68 @@ func TestBatchRegistrationValidatesBeforeRegistering(t *testing.T) {
 	}
 	if peers.GetPeerById(id) != nil {
 		t.Fatal("invalid batch partially registered a peer")
+	}
+}
+
+func TestWhichNodeHasThisImageValidatesImmichAssets(t *testing.T) {
+	const validID = "550e8400-e29b-41d4-a716-446655440000"
+	tests := []struct {
+		name       string
+		query      string
+		status     int
+		response   string
+		wantStatus int
+	}{
+		{"unknown file name", "fileName=missing.jpg", http.StatusOK, `{"assets":{"items":[]}}`, http.StatusNotFound},
+		{"malformed asset ID", "assetId=not-an-id", http.StatusOK, `{"assets":{"items":[]}}`, http.StatusNotFound},
+		{"unknown asset ID", "assetId=" + validID, http.StatusOK, `{"assets":{"items":[]}}`, http.StatusNotFound},
+		{"Immich error", "assetId=" + validID, http.StatusBadGateway, `{"error":"unavailable"}`, http.StatusBadGateway},
+		{"known asset without node copy", "assetId=" + validID, http.StatusOK, `{"assets":{"items":[{"id":"` + validID + `","originalFileName":"photo.jpg"}]}}`, http.StatusOK},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requests := 0
+			immichServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(test.response))
+			}))
+			defer immichServer.Close()
+			cfg := &config.Config{BackupFolderPath: t.TempDir(), ImmichUrl: immichServer.URL, NumReplicas: 100}
+			store := immich.NewStore(cfg, immichServer.Client(), immichServer.Client())
+			peerClient := &http.Client{Transport: registrationTransport(func(request *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})}
+			server := &Server{client: peerClient, envVariables: cfg, immichStore: store}
+			response := httptest.NewRecorder()
+			server.WhichNodeHasThisImage(response, httptest.NewRequest(http.MethodGet, "/whichNodeHasThisImage?"+test.query, nil))
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d; body = %s", response.Code, test.wantStatus, response.Body.String())
+			}
+			if test.name == "malformed asset ID" && requests != 0 {
+				t.Fatalf("Immich requests = %d, want 0", requests)
+			}
+			if test.name == "known asset without node copy" {
+				var result struct {
+					AssetID      string `json:"assetId"`
+					StoringPeers []struct {
+						HasImage bool
+					} `json:"storingPeers"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+					t.Fatal(err)
+				}
+				if result.AssetID != validID {
+					t.Fatalf("asset ID = %q, want %q", result.AssetID, validID)
+				}
+				for _, peer := range result.StoringPeers {
+					if peer.HasImage {
+						t.Fatal("known asset incorrectly reported as present on a node")
+					}
+				}
+			}
+		})
 	}
 }
 

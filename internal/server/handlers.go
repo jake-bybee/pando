@@ -12,12 +12,15 @@ import (
 	"pando/internal/status"
 	"pando/internal/utils"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
+
+var immichAssetIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type RegisterPeerRequest = peers.RegisterPeerRequest
 
@@ -448,6 +451,10 @@ func (s *Server) DoesThisNodeHaveImage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) WhichNodeHasThisImage(w http.ResponseWriter, r *http.Request) {
 	fileName := r.URL.Query().Get("fileName")
 	assetId := r.URL.Query().Get("assetId")
+	if assetId == "" && fileName == "" {
+		writeJSONResponse(w, http.StatusBadRequest, "assetId or fileName is required")
+		return
+	}
 
 	resolvedAssetId := assetId
 	if fileName != "" {
@@ -456,6 +463,25 @@ func (s *Server) WhichNodeHasThisImage(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Printf("[/whichNodeHasThisImage] Error resolving file name to asset ID: %v\n", err)
 			writeJSONResponse(w, http.StatusInternalServerError, "Error resolving file name to asset ID")
+			return
+		}
+		if resolvedAssetId == "" {
+			writeJSONResponse(w, http.StatusNotFound, "No photo with that file name was found in Immich")
+			return
+		}
+	} else {
+		if !immichAssetIDPattern.MatchString(resolvedAssetId) {
+			writeJSONResponse(w, http.StatusNotFound, "Immich does not recognize that asset ID")
+			return
+		}
+		metadata, err := s.immichStore.GetFilesSizesData([]string{resolvedAssetId})
+		if err != nil {
+			fmt.Printf("[/whichNodeHasThisImage] Error checking asset ID in Immich: %v\n", err)
+			writeJSONResponse(w, http.StatusBadGateway, "Could not reach Immich to check this asset")
+			return
+		}
+		if len(metadata) == 0 {
+			writeJSONResponse(w, http.StatusNotFound, "Immich does not recognize that asset ID")
 			return
 		}
 	}
