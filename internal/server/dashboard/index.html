@@ -233,7 +233,7 @@ function nodeCard(n) {
 
 function renderCluster(data) {
   rememberDetails();
-  const nodes = data.nodes || [], root = $("nodes");
+  const nodes = [...(data.nodes || [])].sort((a, b) => esc(a.url).localeCompare(esc(b.url), undefined, { numeric: true }) || esc(a.id).localeCompare(esc(b.id))), root = $("nodes");
   renderSummary(nodes);
   root.replaceChildren();
   if (!nodes.length) { root.append(el("p", "msg", "No nodes found yet.")); return; }
@@ -247,8 +247,7 @@ async function lookup(event) {
   msg.textContent = "Looking up…";
   try {
     const r = await fetch(`/whichNodeHasThisImage?${uuid(value) ? "assetId" : "fileName"}=${encodeURIComponent(value)}`);
-    if (r.status === 404) { msg.textContent = uuid(value) ? "Immich does not recognize that asset ID." : "No photo with that file name was found in Immich."; return; }
-    if (r.status === 502) { msg.textContent = "Could not reach Immich. Try again in a moment."; return; }
+    if (r.status === 404) { msg.textContent = "Image not found."; return; }
     if (!r.ok) { msg.textContent = "Immich is unreachable or the lookup failed."; return; }
     const data = await r.json();
     msg.replaceChildren(document.createTextNode("Resolved asset ID: "), el("code", "", esc(data.assetId)), document.createTextNode(". File names are not unique in Immich."));
