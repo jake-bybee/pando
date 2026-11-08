@@ -26,6 +26,7 @@ type Error struct {
 type Snapshot struct {
 	State                  State
 	StateSince             time.Time
+	PhotoCount             int
 	LastScanStarted        *time.Time
 	LastScanCompleted      *time.Time
 	LastSuccessfulDownload *time.Time
@@ -44,6 +45,7 @@ type Tracker struct {
 	lastScanCompleted      *time.Time
 	lastSuccessfulDownload *time.Time
 	lastError              *Error
+	photoCount             int
 	startedAt              time.Time
 }
 
@@ -86,6 +88,12 @@ func (t *Tracker) MarkDownloadSuccess() {
 	defer t.mu.Unlock()
 	now := time.Now().UTC()
 	t.lastSuccessfulDownload = &now
+}
+
+func (t *Tracker) SetPhotoCount(n int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.photoCount = n
 }
 
 func (t *Tracker) RecordError(source string, err error) {
@@ -137,6 +145,7 @@ func (t *Tracker) Snapshot() Snapshot {
 	snapshot := Snapshot{
 		State:                  t.state,
 		StateSince:             t.stateSince,
+		PhotoCount:             t.photoCount,
 		LastScanStarted:        cloneTime(t.lastScanStarted),
 		LastScanCompleted:      cloneTime(t.lastScanCompleted),
 		LastSuccessfulDownload: cloneTime(t.lastSuccessfulDownload),

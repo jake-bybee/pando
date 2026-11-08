@@ -66,6 +66,7 @@ type statusSettings struct {
 type statusResponse struct {
 	State                  status.State   `json:"state"`
 	StateSince             string         `json:"stateSince"`
+	PhotoCount             int            `json:"photoCount"`
 	LastScanStarted        *string        `json:"lastScanStarted"`
 	LastScanCompleted      *string        `json:"lastScanCompleted"`
 	LastSuccessfulDownload *string        `json:"lastSuccessfulDownload"`
@@ -104,6 +105,7 @@ func (s *Server) StatusHandler(w http.ResponseWriter, r *http.Request) {
 	response := statusResponse{
 		State:                  snapshot.State,
 		StateSince:             snapshot.StateSince.UTC().Format(time.RFC3339),
+		PhotoCount:             snapshot.PhotoCount,
 		LastScanStarted:        formatStatusTime(snapshot.LastScanStarted),
 		LastScanCompleted:      formatStatusTime(snapshot.LastScanCompleted),
 		LastSuccessfulDownload: formatStatusTime(snapshot.LastSuccessfulDownload),
@@ -162,7 +164,7 @@ func (s *Server) ClusterStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.statusMu.Lock()
-	if time.Since(s.statusCached) < 10*time.Second && s.statusCache != nil {
+	if time.Since(s.statusCached) < 20*time.Second && s.statusCache != nil {
 		data := append([]byte(nil), s.statusCache...)
 		s.statusMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -240,19 +242,19 @@ func (s *Server) collectNodeStatus(peer peers.Peer) clusterNodeStatus {
 		result.Reachable = true
 		result.Storage = &storage
 	}
-	var manifest struct {
-		Total int `json:"total"`
-	}
-	if err := request("/manifest?limit=1", &manifest); err != nil {
-		result.Errors = append(result.Errors, "manifest: "+err.Error())
-	} else {
-		result.Reachable, result.PhotoCount = true, manifest.Total
-	}
 	var nodeStatus json.RawMessage
 	if err := request("/status", &nodeStatus); err != nil {
 		result.StatusError = err.Error()
 	} else {
 		result.Status = nodeStatus
+		var decodedStatus struct {
+			PhotoCount int `json:"photoCount"`
+		}
+		if err := json.Unmarshal(nodeStatus, &decodedStatus); err != nil {
+			result.StatusError = err.Error()
+		} else {
+			result.Reachable, result.PhotoCount = true, decodedStatus.PhotoCount
+		}
 	}
 	return result
 }
@@ -285,11 +287,23 @@ func (s *Server) ManifestHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("[/health] Received request, running health check")
 	defer r.Body.Close()
+	s.healthMu.Lock()
+	if s.healthValid && time.Since(s.healthCached) < 60*time.Second {
+		s.healthMu.Unlock()
+		writeJSONResponse(w, http.StatusOK, "Server is healthy")
+		return
+	}
+	s.healthMu.Unlock()
+
+	fmt.Println("[/health] Received request, running health check")
 	success := s.healthStore.RunHealthCheck()
 
 	if success {
+		s.healthMu.Lock()
+		s.healthCached = time.Now()
+		s.healthValid = true
+		s.healthMu.Unlock()
 		writeJSONResponse(w, http.StatusOK, "Server is healthy")
 	} else {
 		writeJSONResponse(w, http.StatusInternalServerError, "Server is unhealthy")

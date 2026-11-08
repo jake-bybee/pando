@@ -87,7 +87,7 @@ async function lookup(event) {
   try { const r=await fetch(`/whichNodeHasThisImage?${uuid(value)?"assetId":"fileName"}=${encodeURIComponent(value)}`); if(r.status===404){$("lookup-message").textContent="Image not found.";return;} if(!r.ok){$("lookup-message").textContent="Immich is unreachable or lookup failed.";return;} const data=await r.json(); $("lookup-message").textContent=`Resolved asset ID: ${esc(data.assetId)}. File names are not unique in Immich.`; const table=document.createElement("table"); const head=document.createElement("tr"); ["URL","Node","Should store","Has it"].forEach(x=>{const th=document.createElement("th");th.textContent=x;head.append(th);}); table.append(head); (data.storingPeers||[]).forEach(p=>{const row=document.createElement("tr");[esc(p.Url||p.url||"unknown"), String(p.Id||"").slice(0,12), "Yes", p.HasImage?"✓":"✗"].forEach(x=>{const td=document.createElement("td");td.textContent=x;row.append(td);});table.append(row);}); $("lookup-result").append(table); }
   catch(e){$("lookup-message").textContent="Lookup failed."; }
 }
-$("refresh").addEventListener("click", refresh); $("lookup-form").addEventListener("submit", lookup); refresh(); setInterval(refresh,15000);
+$("refresh").addEventListener("click", refresh); $("lookup-form").addEventListener("submit", lookup); refresh(); setInterval(refresh,30000);
 </script>
 </body>
 </html>

@@ -27,6 +27,9 @@ type Server struct {
 	statusMu     sync.Mutex
 	statusCache  []byte
 	statusCached time.Time
+	healthMu     sync.Mutex
+	healthCached time.Time
+	healthValid  bool
 }
 
 func NewServer(envVariables *config.Config, client *http.Client, immichStore *immich.Store, trackers ...any) *Server {

@@ -14,6 +14,9 @@ func (s *Store) Start() {
 		s.stopWithError("manifest-save", err)
 		return
 	}
+	if s.status != nil {
+		s.status.SetPhotoCount(len(downloadedAssetFiles))
+	}
 
 	for {
 		s.waitForPeers()
@@ -62,6 +65,9 @@ func (s *Store) Start() {
 					log.Printf("Saving asset manifest failed: %v", err)
 					s.stopWithError("manifest-save", err)
 					return
+				}
+				if s.status != nil {
+					s.status.SetPhotoCount(len(downloadedAssetFiles))
 				}
 			}
 
