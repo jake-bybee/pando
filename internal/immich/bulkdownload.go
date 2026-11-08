@@ -242,6 +242,10 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string, assetFileN
 		go func(chunk Chunk) {
 			defer wg.Done()
 			downloadsChannel <- struct{}{}
+			if s.status != nil {
+				s.status.ChunkStarted()
+				defer s.status.ChunkFinished()
+			}
 			defer func() { <-downloadsChannel }()
 			chunkAssetFileNames := make(map[string]string, len(chunk.AssetIds))
 			for _, assetID := range chunk.AssetIds {

@@ -12,8 +12,11 @@ import (
 	"pando/internal/peers"
 	"pando/internal/server"
 	"pando/internal/service"
+	"pando/internal/status"
 	"pando/internal/utils"
 )
+
+var Version = "dev"
 
 func main() {
 	var transport = &http.Transport{
@@ -36,7 +39,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load environment: %v", err)
 	}
-	immichStore := immich.NewStore(envVariables, client, downloadClient)
+	statusTracker := status.NewTracker()
+	immichStore := immich.NewStore(envVariables, client, downloadClient, statusTracker)
 	healthStore := health.NewStore(envVariables, immichStore)
 	utilsStore := utils.NewStore(envVariables.TimeZone)
 
@@ -46,7 +50,7 @@ func main() {
 	fmt.Println("Health check passed")
 	peers.Me(envVariables.SelfUrl, "healthy", utilsStore, envVariables.BackupFolderPath)
 
-	srv := server.NewServer(envVariables, client, immichStore)
+	srv := server.NewServer(envVariables, client, immichStore, statusTracker, Version)
 
 	srvErrChannel := make(chan error, 1)
 
@@ -56,7 +60,7 @@ func main() {
 
 	fmt.Println("Starting service...")
 
-	service.NewStore(envVariables, immichStore).Start()
+	service.NewStore(envVariables, immichStore, statusTracker).Start()
 
 	if err := <-srvErrChannel; err != nil {
 		log.Fatalf("Failed to start server: %v", err)

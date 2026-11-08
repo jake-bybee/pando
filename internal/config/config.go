@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"pando/internal/utils"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,8 @@ type Config struct {
 	NumPeers         int
 	NumReplicas      int
 	ListenPort       string
+	MinFreeBytes     uint64
+	StorageRecheckSeconds int
 }
 
 func LoadEnv() (*Config, error) {
@@ -52,6 +55,20 @@ func loadFromEnvironment() (*Config, error) {
 	}
 
 	var err error
+	config.MinFreeBytes = 5368709120
+	if value := os.Getenv("MIN_FREE_BYTES"); value != "" {
+		config.MinFreeBytes, err = strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid MIN_FREE_BYTES: %v", err)
+		}
+	}
+	config.StorageRecheckSeconds = 60
+	if value := os.Getenv("STORAGE_RECHECK_SECONDS"); value != "" {
+		config.StorageRecheckSeconds, err = strconv.Atoi(value)
+		if err != nil || config.StorageRecheckSeconds < 0 {
+			return nil, fmt.Errorf("invalid STORAGE_RECHECK_SECONDS: %s", value)
+		}
+	}
 
 	if config.ImmichUrl == "" {
 		return nil, fmt.Errorf("IMMICH_URL is not set")

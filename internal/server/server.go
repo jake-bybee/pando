@@ -11,6 +11,7 @@ import (
 	"pando/internal/health"
 	"pando/internal/immich"
 	"pando/internal/peers"
+	"pando/internal/status"
 	"pando/internal/utils"
 )
 
@@ -21,15 +22,27 @@ type Server struct {
 	immichStore  *immich.Store
 	healthStore  *health.Store
 	utilsStore   *utils.Store
+	status       *status.Tracker
+	version      string
 	statusMu     sync.Mutex
 	statusCache  []byte
 	statusCached time.Time
 }
 
-func NewServer(envVariables *config.Config, client *http.Client, immichStore *immich.Store) *Server {
+func NewServer(envVariables *config.Config, client *http.Client, immichStore *immich.Store, trackers ...any) *Server {
 	peersStore := peers.NewStore(client)
 	healthStore := health.NewStore(envVariables, immichStore)
 	utilsStore := utils.NewStore(envVariables.TimeZone)
+	var tracker *status.Tracker
+	version := "dev"
+	for _, value := range trackers {
+		switch typed := value.(type) {
+		case *status.Tracker:
+			tracker = typed
+		case string:
+			version = typed
+		}
+	}
 
 	return &Server{
 		client:       client,
@@ -38,6 +51,8 @@ func NewServer(envVariables *config.Config, client *http.Client, immichStore *im
 		immichStore:  immichStore,
 		healthStore:  healthStore,
 		utilsStore:   utilsStore,
+		status:       tracker,
+		version:      version,
 	}
 }
 

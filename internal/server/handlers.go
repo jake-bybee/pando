@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"pando/internal/peers"
 	"pando/internal/service"
+	"pando/internal/status"
 	"pando/internal/utils"
 	"path/filepath"
 	"strconv"
@@ -30,15 +31,17 @@ type storageResponse struct {
 }
 
 type clusterNodeStatus struct {
-	ID         string           `json:"id"`
-	URL        string           `json:"url"`
-	Me         bool             `json:"me"`
-	Reachable  bool             `json:"reachable"`
-	Healthy    bool             `json:"healthy"`
-	Storage    *storageResponse `json:"storage,omitempty"`
-	PhotoCount int              `json:"photoCount"`
-	LastSeen   string           `json:"lastSeen"`
-	Errors     []string         `json:"errors,omitempty"`
+	ID          string           `json:"id"`
+	URL         string           `json:"url"`
+	Me          bool             `json:"me"`
+	Reachable   bool             `json:"reachable"`
+	Healthy     bool             `json:"healthy"`
+	Storage     *storageResponse `json:"storage,omitempty"`
+	PhotoCount  int              `json:"photoCount"`
+	LastSeen    string           `json:"lastSeen"`
+	Errors      []string         `json:"errors,omitempty"`
+	Status      json.RawMessage  `json:"status,omitempty"`
+	StatusError string           `json:"statusError,omitempty"`
 }
 
 type clusterStatusResponse struct {
@@ -49,6 +52,87 @@ func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+type statusSettings struct {
+	Replicas              int    `json:"replicas"`
+	ExpectedPeers         int    `json:"expectedPeers"`
+	ListenPort            string `json:"listenPort"`
+	ImmichURL             string `json:"immichUrl"`
+	MinFreeBytes          uint64 `json:"minFreeBytes,omitempty"`
+	StorageRecheckSeconds int    `json:"storageRecheckSeconds,omitempty"`
+}
+
+type statusResponse struct {
+	State                  status.State   `json:"state"`
+	StateSince             string         `json:"stateSince"`
+	LastScanStarted        *string        `json:"lastScanStarted"`
+	LastScanCompleted      *string        `json:"lastScanCompleted"`
+	LastSuccessfulDownload *string        `json:"lastSuccessfulDownload"`
+	LastError              *statusError   `json:"lastError"`
+	StartedAt              string         `json:"startedAt"`
+	UptimeSeconds          int64          `json:"uptimeSeconds"`
+	Version                string         `json:"version"`
+	Settings               statusSettings `json:"settings"`
+}
+
+type statusError struct {
+	Message string `json:"message"`
+	At      string `json:"at"`
+	Source  string `json:"source"`
+}
+
+func formatStatusTime(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339)
+	return &formatted
+}
+
+func (s *Server) StatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	if s.status == nil {
+		writeJSONResponse(w, http.StatusInternalServerError, "Status tracker is not configured")
+		return
+	}
+	snapshot := s.status.Snapshot()
+	response := statusResponse{
+		State:                  snapshot.State,
+		StateSince:             snapshot.StateSince.UTC().Format(time.RFC3339),
+		LastScanStarted:        formatStatusTime(snapshot.LastScanStarted),
+		LastScanCompleted:      formatStatusTime(snapshot.LastScanCompleted),
+		LastSuccessfulDownload: formatStatusTime(snapshot.LastSuccessfulDownload),
+		StartedAt:              snapshot.StartedAt.UTC().Format(time.RFC3339),
+		UptimeSeconds:          snapshot.UptimeSeconds,
+		Version:                s.version,
+		Settings: statusSettings{
+			Replicas:      s.envVariables.NumReplicas,
+			ExpectedPeers: s.envVariables.NumPeers,
+			ListenPort:    s.envVariables.ListenPort,
+			ImmichURL:     safeURLOrigin(s.envVariables.ImmichUrl),
+		},
+	}
+	if snapshot.LastError != nil {
+		response.LastError = &statusError{
+			Message: snapshot.LastError.Message,
+			At:      snapshot.LastError.At.UTC().Format(time.RFC3339),
+			Source:  snapshot.LastError.Source,
+		}
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func safeURLOrigin(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func (s *Server) StorageHandler(w http.ResponseWriter, r *http.Request) {
@@ -163,6 +247,12 @@ func (s *Server) collectNodeStatus(peer peers.Peer) clusterNodeStatus {
 		result.Errors = append(result.Errors, "manifest: "+err.Error())
 	} else {
 		result.Reachable, result.PhotoCount = true, manifest.Total
+	}
+	var nodeStatus json.RawMessage
+	if err := request("/status", &nodeStatus); err != nil {
+		result.StatusError = err.Error()
+	} else {
+		result.Status = nodeStatus
 	}
 	return result
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"log"
-	"pando/internal/peers"
 	"time"
 )
 
@@ -12,34 +11,25 @@ func (s *Store) Start() {
 	downloadedAssetFiles, err := s.initializeAssetManifest()
 	if err != nil {
 		log.Printf("Cannot initialize asset manifest: %v", err)
+		s.stopWithError("manifest-save", err)
 		return
 	}
 
 	for {
-		for !s.isCanStart() {
-			log.Printf("Waiting for all peers to become healthy")
-			time.Sleep(2 * time.Second)
-		}
-
-		allPeers := peers.GetAllPeers()
-		peerIds := make([]string, 0, len(allPeers))
-		myId := ""
-		for _, peer := range allPeers {
-			if peer.Me {
-				myId = peer.Id
-			}
-			peerIds = append(peerIds, peer.Id)
-		}
-
-		if myId == "" {
-			log.Printf("Cannot poll assets: local peer ID not found")
+		s.waitForPeers()
+		myId, peerIds, ok := s.getPeerInfo()
+		if !ok {
 			return
 		}
 
+		s.startScan()
 		for {
 			assetIds, scanComplete, err := s.immichStore.PollAssets()
 			if err != nil {
 				log.Printf("Polling assets failed: %v", err)
+				if s.status != nil {
+					s.status.RecordError("poll", err)
+				}
 				break
 			}
 
@@ -52,27 +42,39 @@ func (s *Store) Start() {
 			}
 
 			if len(pendingPics) > 0 {
+				s.waitForFreeSpace()
 				assetFiles, err := s.immichStore.BulkDownloadWithManifest(pendingPics)
 				if err != nil {
 					log.Printf("Downloading assets failed: %v", err)
+					if s.status != nil {
+						s.status.RecordError("download", err)
+					}
 					s.immichStore.ResetAssetCursor()
 					break
+				}
+				if s.status != nil {
+					s.status.MarkDownloadSuccess()
 				}
 				for assetId, fileName := range assetFiles {
 					downloadedAssetFiles[assetId] = fileName
 				}
 				if err := saveAssetManifest(s.config.BackupFolderPath, downloadedAssetFiles); err != nil {
 					log.Printf("Saving asset manifest failed: %v", err)
+					s.stopWithError("manifest-save", err)
 					return
 				}
 			}
 
 			if scanComplete {
 				log.Printf("Completed asset scan")
+				if s.status != nil {
+					s.status.MarkScanCompleted()
+				}
 				break
 			}
 		}
 
+		s.setIdle()
 		time.Sleep(assetPollInterval)
 	}
 

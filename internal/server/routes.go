@@ -11,6 +11,7 @@ func (s *Server) RegisterRoutes() {
 	http.HandleFunc("/storage", s.StorageHandler)
 	http.HandleFunc("/cluster/status", s.ClusterStatusHandler)
 	http.HandleFunc("/manifest", s.ManifestHandler)
+	http.HandleFunc("/status", s.StatusHandler)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		s.HealthHandler(w, r)

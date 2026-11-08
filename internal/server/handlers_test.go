@@ -9,6 +9,7 @@ import (
 	"pando/internal/config"
 	"pando/internal/peers"
 	"pando/internal/service"
+	"pando/internal/status"
 	"pando/internal/utils"
 	"path/filepath"
 	"reflect"
@@ -216,6 +217,42 @@ func TestStorageEndpoint(t *testing.T) {
 	if storage.Path == "" || storage.TotalBytes == 0 || storage.FreeBytes == 0 ||
 		storage.UsedBytes != storage.TotalBytes-storage.FreeBytes {
 		t.Fatalf("storage response = %+v", storage)
+	}
+}
+
+func TestStatusEndpointEmptyAndDoesNotExposeToken(t *testing.T) {
+	token := "secret-token-value"
+	server := &Server{
+		envVariables: &config.Config{
+			ImmichUrl:      "https://user:password@immich.example:2283/api?token=hidden",
+			ImmichApiToken: token,
+			NumReplicas:    2,
+			NumPeers:       4,
+			ListenPort:     "8080",
+		},
+		status:  status.NewTracker(),
+		version: "dev",
+	}
+	response := httptest.NewRecorder()
+	server.StatusHandler(response, httptest.NewRequest(http.MethodGet, "/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	body := response.Body.String()
+	if strings.Contains(body, token) || strings.Contains(body, "password") || strings.Contains(body, "hidden") {
+		t.Fatalf("status response exposed a secret: %s", body)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["lastScanStarted"] != nil || decoded["lastScanCompleted"] != nil ||
+		decoded["lastSuccessfulDownload"] != nil || decoded["lastError"] != nil {
+		t.Fatalf("empty status has non-null event values: %s", body)
+	}
+	settings, ok := decoded["settings"].(map[string]any)
+	if !ok || settings["immichUrl"] != "https://immich.example:2283" {
+		t.Fatalf("settings = %#v", decoded["settings"])
 	}
 }
 
