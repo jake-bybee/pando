@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
+	"time"
 
 	"pando/internal/config"
 	"pando/internal/health"
@@ -19,6 +21,9 @@ type Server struct {
 	immichStore  *immich.Store
 	healthStore  *health.Store
 	utilsStore   *utils.Store
+	statusMu     sync.Mutex
+	statusCache  []byte
+	statusCached time.Time
 }
 
 func NewServer(envVariables *config.Config, client *http.Client, immichStore *immich.Store) *Server {

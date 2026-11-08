@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pando dashboard</title>
+<style>
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f5f6f8; color: #20242a; }
+@media (prefers-color-scheme: dark) { :root { background: #17191c; color: #e8eaed; } }
+body { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+header, .lookup, .node { background: Canvas; border: 1px solid #8885; border-radius: .6rem; padding: 1rem; margin-bottom: 1rem; }
+header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+button { cursor: pointer; padding: .55rem .8rem; }
+input { width: min(100%, 28rem); padding: .6rem; }
+.nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
+.node { margin: 0; }
+.dot { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; background: #888; margin-right: .4rem; }
+.ok { background: #22a447; } .bad { background: #d33; }
+.muted, .error { color: #777; } .error { color: #d33; }
+.bar { height: .65rem; background: #8885; border-radius: 1rem; overflow: hidden; margin-top: .35rem; }
+.fill { height: 100%; background: #22a447; } .fill.low { background: #d33; }
+table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #8885; }
+</style>
+</head>
+<body>
+<header><div><h1>Pando</h1><span id="updated" class="muted">Not updated</span></div><button id="refresh">Refresh</button></header>
+<section class="lookup"><h2>Asset lookup</h2><form id="lookup-form"><input id="lookup-input" required placeholder="Asset ID or original filename"><button>Find</button></form><p id="lookup-message" class="muted"></p><div id="lookup-result"></div></section>
+<section><h2>Cluster</h2><div id="nodes" class="nodes"></div></section>
+<script>
+const $ = id => document.getElementById(id);
+const esc = value => String(value ?? "");
+const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const bytes = value => { const units=["B","KB","MB","GB","TB"]; let n=Number(value)||0,i=0; while(n>=1024&&i<units.length-1){n/=1024;i++;} return `${n.toFixed(i?1:0)} ${units[i]}`; };
+async function refresh() {
+  $("nodes").textContent = "Loading...";
+  try { const r=await fetch("/cluster/status"); if(!r.ok) throw Error(`HTTP ${r.status}`); renderCluster(await r.json()); $("updated").textContent=`Last updated ${new Date().toLocaleTimeString()}`; }
+  catch(e) { $("nodes").textContent="Unable to load cluster status."; $("updated").textContent=esc(e.message); }
+}
+function renderCluster(data) {
+  const root=$("nodes"); root.textContent="";
+  (data.nodes||[]).forEach(n => {
+    const card=document.createElement("article"); card.className="node";
+    const title=document.createElement("h3"); const dot=document.createElement("span"); dot.className=`dot ${n.reachable&&n.healthy?"ok":n.reachable?"bad":""}`; title.append(dot, document.createTextNode(esc((n.id||"unknown").slice(0,12))));
+    if(n.me) { const badge=document.createElement("small"); badge.textContent=" this node"; title.append(" ",badge); }
+    card.append(title);
+    const info=document.createElement("p"); info.textContent=`${esc(n.url)}\nPhotos: ${n.photoCount||0}\nLast seen: ${esc(n.lastSeen||"unknown")}`; card.append(info);
+    if(n.storage) { const free=Number(n.storage.freeBytes), total=Number(n.storage.totalBytes), pct=total?free/total*100:0; const storage=document.createElement("div"); storage.textContent=`Free ${bytes(free)} of ${bytes(total)} (${pct.toFixed(1)}%)`; const bar=document.createElement("div"); bar.className="bar"; const fill=document.createElement("div"); fill.className=`fill ${pct<10?"low":""}`; fill.style.width=`${Math.max(0,Math.min(100,pct))}%`; bar.append(fill); storage.append(bar); card.append(storage); }
+    const health=document.createElement("p"); health.textContent=`Health: ${n.healthy?"healthy":n.reachable?"unhealthy":"unreachable"}`; card.append(health);
+    (n.errors||[]).forEach(e=>{const p=document.createElement("p");p.className="error";p.textContent=e;card.append(p);}); root.append(card);
+  });
+}
+async function lookup(event) {
+  event.preventDefault(); const value=$("lookup-input").value.trim(); $("lookup-message").textContent="Looking up..."; $("lookup-result").textContent="";
+  if(!value)return;
+  try { const r=await fetch(`/whichNodeHasThisImage?${uuid(value)?"assetId":"fileName"}=${encodeURIComponent(value)}`); if(r.status===404){$("lookup-message").textContent="Image not found.";return;} if(!r.ok){$("lookup-message").textContent="Immich is unreachable or lookup failed.";return;} const data=await r.json(); $("lookup-message").textContent=`Resolved asset ID: ${esc(data.assetId)}. File names are not unique in Immich.`; const table=document.createElement("table"); const head=document.createElement("tr"); ["Node","Should store","Has it"].forEach(x=>{const th=document.createElement("th");th.textContent=x;head.append(th);}); table.append(head); (data.storingPeers||[]).forEach(p=>{const row=document.createElement("tr");[String(p.Id||"").slice(0,12), "Yes", p.HasImage?"✓":"✗"].forEach(x=>{const td=document.createElement("td");td.textContent=x;row.append(td);});table.append(row);}); $("lookup-result").append(table); }
+  catch(e){$("lookup-message").textContent="Lookup failed."; }
+}
+$("refresh").addEventListener("click", refresh); $("lookup-form").addEventListener("submit", lookup); refresh(); setInterval(refresh,15000);
+</script>
+</body>
+</html>

@@ -50,8 +50,8 @@ func (s *Store) ResolveFileNameToAssetId(fileName string) (string, error) {
 	fullUrl := s.config.ImmichUrl + endpoint
 
 	payload := Payload{
-		OriginalFileName: fileName,
 		Size:             1,
+		OriginalFileName: fileName,
 	}
 
 	resp, err := s.ImmichFetcher(fullUrl, "POST", payload)

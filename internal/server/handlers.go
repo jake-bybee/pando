@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,18 +10,161 @@ import (
 	"pando/internal/peers"
 	"pando/internal/service"
 	"pando/internal/utils"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 )
 
 type RegisterPeerRequest = peers.RegisterPeerRequest
 
 type RegisterPeersReceivedRequest = peers.RegisterPeersReceivedRequest
 
+type storageResponse struct {
+	Path       string `json:"path"`
+	TotalBytes uint64 `json:"totalBytes"`
+	FreeBytes  uint64 `json:"freeBytes"`
+	UsedBytes  uint64 `json:"usedBytes"`
+}
+
+type clusterNodeStatus struct {
+	ID         string           `json:"id"`
+	URL        string           `json:"url"`
+	Me         bool             `json:"me"`
+	Reachable  bool             `json:"reachable"`
+	Healthy    bool             `json:"healthy"`
+	Storage    *storageResponse `json:"storage,omitempty"`
+	PhotoCount int              `json:"photoCount"`
+	LastSeen   string           `json:"lastSeen"`
+	Errors     []string         `json:"errors,omitempty"`
+}
+
+type clusterStatusResponse struct {
+	Nodes []clusterNodeStatus `json:"nodes"`
+}
+
 func writeJSONResponse(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func (s *Server) StorageHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(filepath.Clean(s.envVariables.BackupFolderPath), &stat); err != nil {
+		fmt.Printf("[/storage] Failed to inspect storage: %v\n", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to inspect storage")
+		return
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	free := stat.Bavail * uint64(stat.Bsize)
+	used := total - free
+	writeJSONResponse(w, http.StatusOK, storageResponse{
+		Path: s.envVariables.BackupFolderPath, TotalBytes: total, FreeBytes: free, UsedBytes: used,
+	})
+}
+
+func (s *Server) ClusterStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeJSONResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	s.statusMu.Lock()
+	if time.Since(s.statusCached) < 10*time.Second && s.statusCache != nil {
+		data := append([]byte(nil), s.statusCache...)
+		s.statusMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(data)
+		return
+	}
+	s.statusMu.Unlock()
+
+	nodes := peers.GetAllPeers()
+	if me := peers.GetMe(); me != nil {
+		found := false
+		for _, node := range nodes {
+			if node.Id == me.Id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			nodes = append(nodes, *me)
+		}
+	}
+	results := make([]clusterNodeStatus, len(nodes))
+	var wg sync.WaitGroup
+	for i, peer := range nodes {
+		wg.Add(1)
+		go func(i int, peer peers.Peer) {
+			defer wg.Done()
+			results[i] = s.collectNodeStatus(peer)
+		}(i, peer)
+	}
+	wg.Wait()
+	data, err := json.Marshal(clusterStatusResponse{Nodes: results})
+	if err != nil {
+		fmt.Printf("[/cluster/status] Failed to encode status: %v\n", err)
+		writeJSONResponse(w, http.StatusInternalServerError, "Failed to encode cluster status")
+		return
+	}
+	s.statusMu.Lock()
+	s.statusCache = append([]byte(nil), data...)
+	s.statusCached = time.Now()
+	s.statusMu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(data)
+}
+
+func (s *Server) collectNodeStatus(peer peers.Peer) clusterNodeStatus {
+	result := clusterNodeStatus{ID: peer.Id, URL: peer.Url, Me: peer.Me, LastSeen: peer.LastSeen}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	request := func(path string, target any) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, peer.Url+path, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fmt.Errorf("%s returned %s", path, resp.Status)
+		}
+		return json.NewDecoder(resp.Body).Decode(target)
+	}
+	var health string
+	if err := request("/health", &health); err != nil {
+		result.Errors = append(result.Errors, "health: "+err.Error())
+	} else {
+		result.Reachable, result.Healthy = true, true
+	}
+	var storage storageResponse
+	if err := request("/storage", &storage); err != nil {
+		result.Errors = append(result.Errors, "storage: "+err.Error())
+	} else {
+		result.Reachable = true
+		result.Storage = &storage
+	}
+	var manifest struct {
+		Total int `json:"total"`
+	}
+	if err := request("/manifest?limit=1", &manifest); err != nil {
+		result.Errors = append(result.Errors, "manifest: "+err.Error())
+	} else {
+		result.Reachable, result.PhotoCount = true, manifest.Total
+	}
+	return result
 }
 
 func (s *Server) ManifestHandler(w http.ResponseWriter, r *http.Request) {

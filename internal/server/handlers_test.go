@@ -120,6 +120,7 @@ func TestManifestEndpoint(t *testing.T) {
 	if err := os.MkdirAll(settingsFolder, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	manifestPath := filepath.Join(settingsFolder, "asset-manifest.json")
 	if err := os.WriteFile(manifestPath, []byte(`{"asset-c":"three.jpg","asset-a":"one.jpg","asset-b":"two.jpg"}`), 0o644); err != nil {
 		t.Fatal(err)
@@ -197,5 +198,37 @@ func TestManifestEndpoint(t *testing.T) {
 	http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manifest", nil))
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"items":[],"total":0,"nextCursor":null}` {
 		t.Fatalf("missing manifest response = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestStorageEndpoint(t *testing.T) {
+	server := &Server{envVariables: &config.Config{BackupFolderPath: t.TempDir()}}
+	response := httptest.NewRecorder()
+	server.StorageHandler(response, httptest.NewRequest(http.MethodGet, "/storage", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+
+	var storage storageResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &storage); err != nil {
+		t.Fatal(err)
+	}
+	if storage.Path == "" || storage.TotalBytes == 0 || storage.FreeBytes == 0 ||
+		storage.UsedBytes != storage.TotalBytes-storage.FreeBytes {
+		t.Fatalf("storage response = %+v", storage)
+	}
+}
+
+func TestCollectNodeStatusReportsDeadPeer(t *testing.T) {
+	server := &Server{client: &http.Client{}}
+	result := server.collectNodeStatus(peers.Peer{
+		Id:  "dead-peer",
+		Url: "http://127.0.0.1:1",
+	})
+	if result.Reachable {
+		t.Fatal("dead peer reported as reachable")
+	}
+	if len(result.Errors) == 0 {
+		t.Fatal("dead peer returned no errors")
 	}
 }
