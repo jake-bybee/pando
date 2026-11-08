@@ -83,6 +83,11 @@ directory, checks available storage against the Immich user's quota, creates
 or loads a persistent peer ID, and starts the HTTP server. The peer ID is
 stored in `settings/id.txt` below `BACKUP_FOLDER_PATH`.
 
+The service also reconciles the downloaded-asset manifest at startup. Files
+already represented in the manifest are retained, missing files are removed
+from the manifest, and asset-ID-named files not yet represented are looked up
+in Immich so their original filenames can be registered.
+
 The service logs progress to standard output. It does not daemonize or manage
 process supervision; use the service manager appropriate for your host when
 running it continuously.
@@ -124,7 +129,13 @@ until it is `null`.
 
 The manifest is stored at
 `<BACKUP_FOLDER_PATH>/settings/asset-manifest.json`. It records successful
-downloads; it is not a filesystem integrity or re-scan report.
+downloads; it is not a filesystem integrity or re-scan report. Downloaded
+assets are stored in the backup root using their Immich asset ID as the
+filename, with the original file extension preserved. Each archive is
+extracted into a hash-named temporary directory and removed after its files
+are moved into the backup root.
+The manifest retains each asset's original Immich filename separately from
+the asset-ID-based filename on disk.
 
 ## How replication works
 

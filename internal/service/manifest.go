@@ -56,6 +56,67 @@ func GetAssetManifestPage(backupFolderPath string, limit int, after string) (Ass
 	return page, nil
 }
 
+func (s *Store) initializeAssetManifest() (map[string]string, error) {
+	manifest, err := loadAssetManifest(s.config.BackupFolderPath)
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := os.ReadDir(s.config.BackupFolderPath)
+	if err != nil {
+		return nil, fmt.Errorf("read backup folder: %w", err)
+	}
+
+	assetFiles := make(map[string]string)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		assetID := assetIDFromFileName(file.Name())
+		if assetID != "" {
+			assetFiles[assetID] = file.Name()
+		}
+	}
+
+	for assetID := range manifest {
+		expectedFileName := assetID + filepath.Ext(manifest[assetID])
+		if fileName, exists := assetFiles[assetID]; !exists || fileName != expectedFileName {
+			delete(manifest, assetID)
+			continue
+		}
+		delete(assetFiles, assetID)
+	}
+
+	if len(assetFiles) > 0 {
+		assetIDs := make([]string, 0, len(assetFiles))
+		for assetID := range assetFiles {
+			assetIDs = append(assetIDs, assetID)
+		}
+		metadata, err := s.immichStore.GetFilesSizesData(assetIDs)
+		if err != nil {
+			return nil, fmt.Errorf("query metadata for unregistered assets: %w", err)
+		}
+		for _, asset := range metadata {
+			if asset.OriginalFileName != "" {
+				manifest[asset.AssetId] = asset.OriginalFileName
+			}
+		}
+	}
+
+	if err := saveAssetManifest(s.config.BackupFolderPath, manifest); err != nil {
+		return nil, fmt.Errorf("save initialized asset manifest: %w", err)
+	}
+	return manifest, nil
+}
+
+func assetIDFromFileName(fileName string) string {
+	extension := filepath.Ext(fileName)
+	if extension == "" {
+		return fileName
+	}
+	return fileName[:len(fileName)-len(extension)]
+}
+
 func loadAssetManifest(backupFolderPath string) (map[string]string, error) {
 	path := filepath.Join(backupFolderPath, assetManifestPath)
 	data, err := os.ReadFile(path)

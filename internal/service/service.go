@@ -9,9 +9,9 @@ import (
 const assetPollInterval = time.Minute
 
 func (s *Store) Start() {
-	downloadedAssetFiles, err := loadAssetManifest(s.config.BackupFolderPath)
+	downloadedAssetFiles, err := s.initializeAssetManifest()
 	if err != nil {
-		log.Printf("Cannot load asset manifest: %v", err)
+		log.Printf("Cannot initialize asset manifest: %v", err)
 		return
 	}
 

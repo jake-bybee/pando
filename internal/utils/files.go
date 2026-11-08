@@ -24,22 +24,35 @@ func NewStore(timezone string) *Store {
 	return &Store{timezone: timezone}
 }
 
-func Unzip(src, dest string) error {
+func Unzip(src, dest string, assetFileNames map[string]string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
+	usedAssetIDs := make(map[string]bool, len(assetFileNames))
+	extracted := 0
 	for _, f := range r.File {
-		path := uniquePath(filepath.Join(dest, f.Name))
-
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, os.ModePerm)
 			continue
 		}
 
-		os.MkdirAll(filepath.Dir(path), os.ModePerm)
+		relativePath, err := safeZipPath(f.Name)
+		if err != nil {
+			return err
+		}
+
+		assetID := findAssetID(filepath.Base(relativePath), assetFileNames, usedAssetIDs)
+		if assetID == "" {
+			return fmt.Errorf("archive entry %q does not match an asset filename", f.Name)
+		}
+		usedAssetIDs[assetID] = true
+		path := filepath.Join(dest, assetID+filepath.Ext(relativePath))
+
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
 
 		dstFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
@@ -52,23 +65,43 @@ func Unzip(src, dest string) error {
 			return err
 		}
 
-		io.Copy(dstFile, srcFile)
-		srcFile.Close()
-		dstFile.Close()
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			srcFile.Close()
+			dstFile.Close()
+			return err
+		}
+		if err := srcFile.Close(); err != nil {
+			dstFile.Close()
+			return err
+		}
+		if err := dstFile.Close(); err != nil {
+			return err
+		}
+		extracted++
+	}
+
+	if extracted != len(assetFileNames) {
+		return fmt.Errorf("archive contained %d files, expected %d", extracted, len(assetFileNames))
 	}
 	return nil
 }
 
-func uniquePath(path string) string {
-	ext := filepath.Ext(path)
-	base := strings.TrimSuffix(path, ext)
-
-	for i := 1; ; i++ {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return path
-		}
-		path = fmt.Sprintf("%s(%d)%s", base, i, ext)
+func safeZipPath(name string) (string, error) {
+	cleaned := filepath.Clean(filepath.FromSlash(name))
+	if cleaned == "." || filepath.IsAbs(cleaned) || cleaned == ".." ||
+		strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("unsafe archive entry path %q", name)
 	}
+	return cleaned, nil
+}
+
+func findAssetID(fileName string, assetFileNames map[string]string, used map[string]bool) string {
+	for assetID, originalFileName := range assetFileNames {
+		if !used[assetID] && filepath.Base(originalFileName) == fileName {
+			return assetID
+		}
+	}
+	return ""
 }
 
 func (s *Store) TimeNow() string {

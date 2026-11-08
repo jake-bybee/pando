@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"pando/internal/utils"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -108,7 +109,7 @@ func (s *Store) BulkDownloadWithManifest(assetIds []string) (map[string]string, 
 		}
 	}
 
-	err = s.bulkDownloadRoutineSwarm(chunkedAssetIds, s.config.BackupFolderPath)
+	err = s.bulkDownloadRoutineSwarm(chunkedAssetIds, s.config.BackupFolderPath, assetFileNames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download batches: %w", err)
 	}
@@ -222,7 +223,7 @@ func ChunkAssetsBySize(assets []FileSizeDataResponse) []Chunk {
 	return chunks
 }
 
-func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
+func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string, assetFileNames map[string]string) error {
 	var wg sync.WaitGroup
 
 	type errorResult struct {
@@ -239,10 +240,22 @@ func (s *Store) bulkDownloadRoutineSwarm(chunks []Chunk, dest string) error {
 			defer wg.Done()
 			downloadsChannel <- struct{}{}
 			defer func() { <-downloadsChannel }()
-			numFilesDownloaded, err := s.bulkDownload(chunk, dest)
+			chunkAssetFileNames := make(map[string]string, len(chunk.AssetIds))
+			for _, assetID := range chunk.AssetIds {
+				fileName, ok := assetFileNames[assetID]
+				if !ok {
+					errorsChannel <- errorResult{
+						AssetIds: chunk.AssetIds,
+						Err:      fmt.Errorf("no filename metadata found for asset %s", assetID),
+					}
+					return
+				}
+				chunkAssetFileNames[assetID] = fileName
+			}
+			numFilesDownloaded, err := s.bulkDownload(chunk, dest, chunkAssetFileNames)
 			if err != nil {
 				log.Printf("Failed to bulk download assets %v", err)
-				errorsChannel <- errorResult{Err: err}
+				errorsChannel <- errorResult{AssetIds: chunk.AssetIds, Err: err}
 				return
 			}
 			log.Printf("Successfully downloaded %d files to %s", numFilesDownloaded, dest)
@@ -284,9 +297,12 @@ func (s *Store) getInfoForBatchDownload(payload BatchDownloadInfoPayload) (Batch
 	return batchInfo, nil
 }
 
-func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
+func (s *Store) bulkDownload(chunk Chunk, dest string, assetFileNames map[string]string) (int, error) {
 	endpoint := "/api/download/archive"
 	fullUrl := s.config.ImmichUrl + endpoint
+	if dest == "" {
+		dest = s.config.BackupFolderPath
+	}
 
 	log.Printf("Preparing to bulk download %d assets (%s) from %s", len(chunk.AssetIds), formatBytes(chunk.TotalSize), fullUrl)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -302,7 +318,7 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 	defer resp.Body.Close()
 
 	fileName := fmt.Sprintf("%x.zip", sha256.Sum256([]byte(strings.Join(chunk.AssetIds, ","))))
-	filePath := s.config.BackupFolderPath + fileName
+	filePath := filepath.Join(dest, fileName)
 
 	f, err := os.Create(filePath)
 	if err != nil {
@@ -315,20 +331,37 @@ func (s *Store) bulkDownload(chunk Chunk, dest string) (int, error) {
 		return 0, err
 	}
 
-	if dest == "" {
-		dest = s.config.BackupFolderPath
+	tempDir := filepath.Join(dest, strings.TrimSuffix(fileName, filepath.Ext(fileName)))
+	if err := os.Mkdir(tempDir, 0o755); err != nil {
+		os.Remove(filePath)
+		return 0, fmt.Errorf("create extraction directory: %w", err)
 	}
+	defer os.RemoveAll(tempDir)
 
-	err = utils.Unzip(filePath, dest)
+	err = utils.Unzip(filePath, tempDir, assetFileNames)
 	if err != nil {
 		log.Printf("Failed to unzip bulk download file %s: %v", filePath, err)
+		os.Remove(filePath) // Clean up the zip file if unzipping fails
 		return 0, err
 	}
-	log.Printf("Successfully wrote bulk download file %s", filePath)
 
-	os.Remove(filePath) // Clean up the zip file after extraction
+	for assetID, originalFileName := range assetFileNames {
+		fileName := assetStorageFileName(assetID, originalFileName)
+		if err := os.Rename(filepath.Join(tempDir, fileName), filepath.Join(dest, fileName)); err != nil {
+			os.Remove(filePath)
+			return 0, fmt.Errorf("move downloaded asset %s: %w", assetID, err)
+		}
+	}
+	if err := os.Remove(filePath); err != nil {
+		return 0, fmt.Errorf("remove downloaded archive: %w", err)
+	}
+	log.Printf("Successfully downloaded and stored %d assets from %s", len(assetFileNames), fileName)
 
 	return len(chunk.AssetIds), nil
+}
+
+func assetStorageFileName(assetID, originalFileName string) string {
+	return assetID + filepath.Ext(filepath.Base(originalFileName))
 }
 
 func (s *Store) getAllDownloadBatches(batchInfo BatchDownloadInfoResponse) ([]Chunk, map[string]string, error) {
