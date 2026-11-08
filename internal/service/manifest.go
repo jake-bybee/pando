@@ -137,6 +137,22 @@ func loadAssetManifest(backupFolderPath string) (map[string]string, error) {
 	return manifest, nil
 }
 
+func FileIsSavedFromOriginalFileName(originalFileName string, backupFolderPath string) (bool, string) {
+
+	manifest, err := loadAssetManifest(backupFolderPath)
+	if err != nil {
+		return false, ""
+	}
+
+	for assetId, fileName := range manifest {
+		if fileName == originalFileName {
+			return true, assetId
+		}
+	}
+
+	return false, ""
+}
+
 func saveAssetManifest(backupFolderPath string, manifest map[string]string) error {
 	path := filepath.Join(backupFolderPath, assetManifestPath)
 	directory := filepath.Dir(path)

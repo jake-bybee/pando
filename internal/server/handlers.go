@@ -177,3 +177,15 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 	writeJSONResponse(w, http.StatusOK, "Peers registration processed")
 	fmt.Println("[/registerPeersReceived] Successfully processed peers registration")
 }
+
+func (s *Server) DoesThisNodeHaveImage(w http.ResponseWriter, r *http.Request) {
+
+	exists, assetId := service.FileIsSavedFromOriginalFileName(r.URL.Query().Get("originalFileName"), s.envVariables.BackupFolderPath)
+	fmt.Printf("[/doesThisNodeHaveImage] Checking if this node has image with originalFileName: %s, exists: %v, assetId: %s\n", r.URL.Query().Get("originalFileName"), exists, assetId)
+	if exists {
+		writeJSONResponse(w, http.StatusOK, map[string]string{"assetId": assetId})
+	} else {
+		writeJSONResponse(w, http.StatusNotFound, "Image not found")
+	}
+
+}

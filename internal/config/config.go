@@ -77,7 +77,7 @@ func loadFromEnvironment() (*Config, error) {
 		config.ListenPort = "8080" // default port if not set
 	}
 	if config.MasterPandoUrl == "" {
-		masterPandoUrl, err := getMasterPandoUrlFromImmichUrl(config.ImmichUrl, config.MasterPandoPort)
+		masterPandoUrl, err := getMasterPandoUrlFromImmichUrl()
 		if err != nil {
 			return nil, err
 		}
@@ -102,13 +102,7 @@ func loadFromEnvironment() (*Config, error) {
 	return config, nil
 }
 
-func getMasterPandoUrlFromImmichUrl(immichUrl string, masterPandoPort string) (string, error) {
-	// If immich uses a port, replace that port to the master pando port
-	if strings.Contains(immichUrl, ":") {
-		hostUrl := strings.Split(immichUrl, ":")[0]
-		immichUrl = fmt.Sprintf("%s:%s", hostUrl, masterPandoPort)
-		return immichUrl, nil
-	}
+func getMasterPandoUrlFromImmichUrl() (string, error) {
 	log.Println("Can't parse master pando URL from immich url, please provide an master pando URL in the environment variable MASTER_PANDO_URL")
 	return "", fmt.Errorf("can't parse master pando URL from immich url")
 
