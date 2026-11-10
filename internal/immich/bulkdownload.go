@@ -105,15 +105,44 @@ func (s *Store) BulkDownloadWithManifest(assetIds []string) (map[string]string, 
 		log.Printf("Failed to get all download batches: %v", err)
 		return nil, fmt.Errorf("failed to get all download batches: %w", err)
 	}
+	missing := make([]string, 0)
 	for _, assetId := range assetIds {
 		if _, ok := assetFileNames[assetId]; !ok {
-			return nil, fmt.Errorf("no filename metadata found for asset %s", assetId)
+			missing = append(missing, assetId)
 		}
 	}
 
 	err = s.bulkDownloadRoutineSwarm(chunkedAssetIds, s.config.BackupFolderPath, assetFileNames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download batches: %w", err)
+	}
+
+	if len(missing) > 0 {
+		missingSizes, err := s.GetFilesSizesData(missing)
+		if err != nil {
+			log.Printf("Failed to get metadata for missing assets %v: %v", missing, err)
+		} else {
+			missingByID := make(map[string]FileSizeDataResponse, len(missingSizes))
+			for _, asset := range missingSizes {
+				missingByID[asset.AssetId] = asset
+			}
+			for _, assetID := range missing {
+				asset, ok := missingByID[assetID]
+				if !ok {
+					logMissingAssetMetadata(s, assetID)
+					continue
+				}
+				if asset.OriginalFileName == "" {
+					log.Printf("No filename metadata found for missing asset %s", assetID)
+					continue
+				}
+				if err := s.singleDownload(assetID, asset.OriginalFileName, s.config.BackupFolderPath); err != nil {
+					log.Printf("Failed to download missing asset %s: %v", assetID, err)
+					continue
+				}
+				assetFileNames[assetID] = asset.OriginalFileName
+			}
+		}
 	}
 
 	return assetFileNames, nil
