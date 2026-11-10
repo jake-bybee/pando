@@ -1,127 +1,159 @@
 # Pando
 
-Pando is a lightweight Go service that continuously backs up Immich assets
-across a set of Pando peers. Every peer runs the same binary. Peers use
-deterministic hashing to independently decide which peers store each asset,
-so no shared database or central placement service is required.
+Back up your Immich photos across several machines, with no central server.
 
-Pando provides a complete, continuously running backup flow:
+One disk, or one house, is a single point of failure for a photo library. Pando
+runs the same service on every peer and uses consistent hashing to decide which
+peers store each Immich asset, so the placement does not require a central
+database or coordinator.
 
-1. A peer starts and validates its Immich connection and local storage.
-2. Peers register with the configured master peer and exchange the peer list.
-3. Each peer polls Immich for assets.
-4. Consistent hashing assigns each asset to `NUM_REPLICAS` peers.
-5. Assigned assets are downloaded locally and recorded in a manifest.
-6. The process repeats every minute after the current asset scan completes.
+## Status
 
-Peer IDs persist in the backup directory, so a restarted peer re-registers
-with its existing identity and updates its reachable URL without disrupting
-the cluster. Assets that Immich does not include in an archive, including
-hidden motion-photo videos, are downloaded individually from the original
-asset endpoint and included in the manifest after a successful download.
+Pando is early-stage software. It is not yet recommended as your only backup;
+keep your original Immich data and use Pando as an additional copy.
 
-## Requirements
+The current implementation provides continuous polling, deterministic asset
+placement, peer registration, bulk and individual asset downloads, a persistent
+manifest, and a web dashboard. It does not yet provide peer API authentication,
+encrypted peer transport, cross-peer manifest reconciliation, quorum or
+verified writes, automatic peer removal or rebalancing, or a metrics endpoint.
 
-- Go 1.27.1 or newer
-- A reachable Immich server
-- An Immich API key with sufficient access (an `all` permission works)
-- One or more directories with enough free space for the assigned assets
-- Network connectivity between every Pando peer
+## Dashboard
 
-## Configuration
+<!-- ![Pando dashboard](docs/dashboard.png) -->
 
-Pando reads configuration from environment variables and an optional `.env`
-file in the working directory.
+Open `http://localhost:8080/dashboard` to see cluster health, node reachability,
+storage, photo counts, and look up where an asset is stored. The screenshot link
+is intentionally commented out until `docs/dashboard.png` is added.
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `IMMICH_URL` | Yes | Base URL of the Immich server, for example `http://immich:2283` |
-| `IMMICH_API_TOKEN` | Yes | Immich API key |
-| `SELF_URL` | Yes | URL other peers use to reach this peer, for example `http://pando-1:8080` |
-| `BACKUP_FOLDER_PATH` | Yes | Existing directory where this peer stores downloaded assets |
-| `MASTER_PANDO_URL` | Recommended | URL of the peer used for initial registration |
-| `MASTER_PANDO_PORT` | Conditional | Port used to derive `MASTER_PANDO_URL` when it is not set |
-| `NUM_PEERS` | Yes | Expected total number of peers in the cluster |
-| `NUM_REPLICAS` | Yes | Number of peers that should store each asset |
-| `LISTEN_PORT` | No | HTTP port for this peer; defaults to `8080` |
-| `TIME_ZONE` | No | IANA time zone for timestamps; defaults to `UTC` |
+## How it works
 
-`NUM_REPLICAS` should be no greater than `NUM_PEERS`. The service waits until
-the expected number of peers is registered and healthy before downloading
-assets.
-
-Example `.env` for a three-peer cluster:
-
-```dotenv
-IMMICH_URL=http://immich:2283
-IMMICH_API_TOKEN=replace-with-an-immich-api-key
-
-SELF_URL=http://pando-1:8080
-MASTER_PANDO_URL=http://pando-1:8080
-LISTEN_PORT=8080
-
-BACKUP_FOLDER_PATH=/var/lib/pando
-NUM_PEERS=3
-NUM_REPLICAS=2
-TIME_ZONE=UTC
+```mermaid
+flowchart LR
+    I[Immich] --> P[Pando peers]
+    P --> H[Hash asset ID with peer IDs]
+    H --> R[Choose the highest-scoring NUM_REPLICAS peers]
+    R --> P1[Peer 1]
+    R --> P2[Peer 2]
+    R --> P3[Peer 3]
 ```
 
-Use a unique `SELF_URL`, `LISTEN_PORT`, and `BACKUP_FOLDER_PATH` on every peer.
-The backup directory must exist before startup.
+- A **peer** is one running Pando process with its own backup directory and persistent ID.
+- Pando checks Immich access and local storage before starting its backup loop.
+- Peers register with the configured master peer and relay the known peer list.
+- Consistent hashing assigns each asset to the configured number of **replicas**, meaning independent peer copies.
+- Each peer polls Immich, downloads its assignments, and records successful downloads in a **manifest**, a map of asset IDs to their original filenames.
+- The dashboard reports cluster state, node health, storage, and asset locations.
 
-## Running
+## Quick start with Docker Compose
 
-Build and run the service:
+Requirements: Docker Compose, a reachable Immich server, an Immich API key, and
+network connectivity between the Pando peers.
+
+1. Copy the example environment file:
+
+   ```sh
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and set the Immich URL and API token, a reachable `SELF_URL`,
+   the master peer URL, `NUM_PEERS`, and `NUM_REPLICAS`. For a one-node test,
+   use `NUM_PEERS=1`, `NUM_REPLICAS=1`, and point both peer URLs at that node.
+3. Build and start Pando:
+
+   ```sh
+   docker compose up -d --build
+   ```
+
+4. Open [http://localhost:8080/dashboard](http://localhost:8080/dashboard).
+
+The Compose file mounts `./data` at `/backup` and sets
+`BACKUP_FOLDER_PATH=/backup`, so the value in `.env` is overridden for this
+Compose setup. The `:z` volume label is needed on Fedora and other SELinux
+environments. Compose uses `network_mode: host` so the container can use host
+networking and private-network connectivity such as NetBird or Tailscale.
+Compose builds the repository's `Dockerfile`; `.dockerignore` keeps `data/`,
+`.git/`, `.env`, and ZIP archives out of the Docker build context.
+
+When using `docker run --env-file` directly, use unquoted values in the env
+file. Keep the backup volume mounted at the path in `BACKUP_FOLDER_PATH`, and
+make sure each peer has a distinct `SELF_URL`, listening port, and backup
+directory.
+
+## Run from source
+
+The repository requires Go 1.27.1, as specified in `go.mod`.
+
+```sh
+go run .
+```
+
+To build and run the binary:
 
 ```sh
 go build -o pando .
 ./pando
 ```
 
-Or run it directly during development:
+Pando validates the Immich API key and permissions, checks that the backup
+directory exists, checks available storage against the Immich user's quota,
+loads or creates the persistent peer ID, and starts the HTTP server. The
+service then waits for the configured number of healthy peers before polling
+Immich. Asset polling is cursor-based; after a completed scan, the next scan
+starts after one minute.
 
-```sh
-go run .
-```
+## Configuration
 
-On startup, Pando performs an Immich API-key check, verifies the backup
-directory, checks available storage against the Immich user's quota, creates
-or loads a persistent peer ID, and starts the HTTP server. The peer ID is
-stored in `settings/id.txt` below `BACKUP_FOLDER_PATH`.
+Pando reads environment variables and an optional `.env` file.
 
-The service also reconciles the downloaded-asset manifest at startup. Files
-already represented in the manifest are retained, missing files are removed
-from the manifest, and asset-ID-named files not yet represented are looked up
-in Immich so their original filenames can be registered.
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `IMMICH_URL` | Yes | None | Base Immich URL, such as `http://immich:2283`. |
+| `IMMICH_API_TOKEN` | Yes | None | Immich API key. |
+| `SELF_URL` | Yes | None | URL other peers use to reach this peer. |
+| `BACKUP_FOLDER_PATH` | Yes | None | Existing directory for downloaded assets and settings. |
+| `MASTER_PANDO_URL` | Yes | None | Peer URL used for initial registration. |
+| `MASTER_PANDO_PORT` | No | None | Read from the environment, but no fallback is currently implemented when `MASTER_PANDO_URL` is empty. |
+| `NUM_PEERS` | Yes | `0` when unset or invalid | Expected total number of peers. |
+| `NUM_REPLICAS` | Yes | `0` when unset or invalid | Number of peers that should store each asset. |
+| `LISTEN_PORT` | No | `8080` | HTTP port for this peer. |
+| `TIME_ZONE` | No | `UTC` | IANA time zone used for timestamps. |
+| `MIN_FREE_BYTES` | No | `5368709120` | Minimum free bytes required before an asset download begins. |
+| `STORAGE_RECHECK_SECONDS` | No | `60` | Seconds between free-space checks while waiting to download. |
 
-The service logs progress to standard output. It does not daemonize or manage
-process supervision; use the service manager appropriate for your host when
-running it continuously.
+`NUM_REPLICAS` should not exceed `NUM_PEERS`. The backup directory must exist
+before startup. Peer IDs are stored at
+`<BACKUP_FOLDER_PATH>/settings/id.txt`.
 
 ## HTTP API
 
-The peer HTTP server listens on `LISTEN_PORT`.
+The server listens on `LISTEN_PORT`. The dashboard and status endpoints are
+useful for operators; peer and asset-location endpoints are internal cluster
+APIs.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Re-runs the Immich and local storage health checks |
-| `GET` | `/manifest` | Lists assets recorded as downloaded by this peer |
-| `POST` | `/registerPeer` | Registers a peer with this node |
-| `POST` | `/registerPeersReceived` | Registers a relayed peer list |
-| `GET` | `/relayPeers` | Returns the peers known by this node |
+| `GET` | `/dashboard` | Dashboard with cluster, node, storage, and asset lookup views. |
+| `GET` | `/storage` | Local storage totals and free space. |
+| `GET` | `/cluster/status` | Aggregated status for known nodes. |
+| `GET` | `/manifest` | Paginated manifest entries. |
+| `GET` | `/status` | Service state, counters, settings, and recent error information. |
+| `GET` | `/health` | Runs the Immich and local storage health checks. |
+| `POST` | `/registerPeer` | **Internal:** register or update one peer. |
+| `GET` | `/relayPeers` | **Internal:** return the peers known by this node. |
+| `POST` | `/registerPeersReceived` | **Internal:** accept a relayed peer list. |
+| `GET` | `/doesThisNodeHaveImage` | **Internal:** check whether this node has an asset. |
+| `GET` | `/whichNodeHasThisImage` | **Internal:** find the peers assigned to or storing an asset. |
+| Any | `/test` | **Internal:** hard-coded bulk-download test endpoint; do not expose it publicly. |
 
-Peer registration endpoints are intended for communication between trusted
-Pando nodes and are not authenticated by the service.
+Peer registration and asset-location endpoints are unauthenticated and are
+intended for a private network. Do not expose them directly to the internet.
 
 ### Manifest pagination
 
-`GET /manifest` accepts:
-
-- `limit`: optional integer from `1` to `1000`; defaults to `100`
-- `after`: optional asset ID cursor
-
-Entries are sorted by asset ID. Use `nextCursor` as the next `after` value
-until it is `null`.
+`GET /manifest` accepts `limit`, an integer from `1` to `1000` that defaults to
+`100`, and `after`, an optional asset ID cursor. Entries are sorted by asset ID.
+Use `nextCursor` as the next `after` value until it is `null`.
 
 ```json
 {
@@ -134,57 +166,49 @@ until it is `null`.
 ```
 
 The manifest is stored at
-`<BACKUP_FOLDER_PATH>/settings/asset-manifest.json`. It records successful
-downloads; it is not a filesystem integrity or re-scan report. Downloaded
-assets are stored in the backup root using their Immich asset ID as the
-filename, with the original file extension preserved. Each archive is
-extracted into a hash-named temporary directory and removed after its files
-are moved into the backup root.
-The manifest retains each asset's original Immich filename separately from
-the asset-ID-based filename on disk.
+`<BACKUP_FOLDER_PATH>/settings/asset-manifest.json`. Files are stored in the
+backup root using their Immich asset ID plus the original extension. Archive
+temporary directories and downloaded archives are removed after successful
+extraction.
 
-## How replication works
+## Roadmap
 
-For each Immich asset, every peer calculates the same score for every known
-peer using the asset ID and peer ID. The highest-scoring peers are selected
-until `NUM_REPLICAS` copies are assigned. Since the assignment is
-deterministic, peers can download their own assignments without a coordinator.
+Done:
 
-Asset discovery is cursor-based and paginated through Immich. Failed downloads
-reset the cursor so the scan can be retried. Once a scan completes, the service
-waits one minute before polling again.
-
-## Development
-
-Run the unit tests:
-
-```sh
-go test ./...
-```
-
-Build the binary:
-
-```sh
-go build ./...
-```
-
-The repository also includes a `mise` task for starting multiple local
-processes:
-
-```sh
-mise run test
-```
-
-## Current scope
-
-Implemented:
-
-- Immich connectivity and API-key health checks
-- Local storage/quota health checks
-- Persistent peer IDs
-- Peer registration, relay, and health status
+- Immich API-key and local storage health checks
+- Persistent peer IDs and peer registration relay
 - Deterministic multi-peer asset placement
-- Cursor-based Immich asset polling
-- Bulk asset downloads
-- Atomic downloaded-asset manifest updates
-- Paginated manifest API
+- Cursor-based asset polling
+- Bulk downloads and individual fallback downloads
+- Atomic manifest updates and paginated manifest API
+- Cluster dashboard with node, storage, health, and asset lookup views
+
+Planned:
+
+- [ ] Detect peer failures and mark assignments unavailable automatically
+- [ ] Reconcile manifests between peers
+- [ ] Add quorum or verified-write handling
+- [ ] Add a dashboard action to remove a peer
+- [ ] Show the count of under-replicated photos in the dashboard
+- [ ] Authenticate peer endpoints
+- [ ] Add a metrics endpoint
+
+## Contributing
+
+Pando is small enough to understand by following one feature through its
+handler, store, and tests. Start with the [contributor guide](CONTRIBUTING.md),
+run the tests before and after a change, and keep pull requests focused.
+Documentation, tests, dashboard work, and operational improvements are all
+useful contributions.
+
+Good first issues:
+
+- Add handler tests for the dashboard's method and response behavior.
+- Add a dashboard indicator for under-replicated assets once detection exists.
+- Implement the documented `MASTER_PANDO_PORT` fallback behavior.
+- Add tests for manifest reconciliation edge cases.
+- Add method validation and response tests for internal peer endpoints.
+
+## License
+
+Pando is released under the [MIT License](LICENSE).
