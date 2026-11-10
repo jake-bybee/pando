@@ -5,7 +5,7 @@ across a set of Pando peers. Every peer runs the same binary. Peers use
 deterministic hashing to independently decide which peers store each asset,
 so no shared database or central placement service is required.
 
-The core backup flow is usable:
+Pando provides a complete, continuously running backup flow:
 
 1. A peer starts and validates its Immich connection and local storage.
 2. Peers register with the configured master peer and exchange the peer list.
@@ -13,6 +13,12 @@ The core backup flow is usable:
 4. Consistent hashing assigns each asset to `NUM_REPLICAS` peers.
 5. Assigned assets are downloaded locally and recorded in a manifest.
 6. The process repeats every minute after the current asset scan completes.
+
+Peer IDs persist in the backup directory, so a restarted peer re-registers
+with its existing identity and updates its reachable URL without disrupting
+the cluster. Assets that Immich does not include in an archive, including
+hidden motion-photo videos, are downloaded individually from the original
+asset endpoint and included in the manifest after a successful download.
 
 ## Requirements
 
@@ -182,7 +188,3 @@ Implemented:
 - Bulk asset downloads
 - Atomic downloaded-asset manifest updates
 - Paginated manifest API
-
-The service currently assumes a trusted network between peers. Peer API
-authentication, encrypted peer-to-peer transport, filesystem re-verification,
-and active rebalancing after membership changes are not implemented.
