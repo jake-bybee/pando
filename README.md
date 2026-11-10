@@ -144,7 +144,6 @@ APIs.
 | `POST` | `/registerPeersReceived` | **Internal:** accept a relayed peer list. |
 | `GET` | `/doesThisNodeHaveImage` | **Internal:** check whether this node has an asset. |
 | `GET` | `/whichNodeHasThisImage` | **Internal:** find the peers assigned to or storing an asset. |
-| Any | `/test` | **Internal:** hard-coded bulk-download test endpoint; do not expose it publicly. |
 
 Peer registration and asset-location endpoints are unauthenticated and are
 intended for a private network. Do not expose them directly to the internet.
