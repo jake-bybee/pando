@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -83,10 +84,21 @@ func TestRegistrationPreservesIDAndRelaysURL(t *testing.T) {
 	if !found {
 		t.Fatalf("relay payload does not contain peer ID and URL: %+v", relayed)
 	}
+	firstPeer := peers.GetPeerById(id)
+	if firstPeer == nil {
+		t.Fatal("registered peer not found")
+	}
+	time.Sleep(time.Second)
+
 	response = httptest.NewRecorder()
+	body = `{"id":"` + id + `","url":"HTTP://UPDATED.EXAMPLE/"}`
 	server.RegisterPeerHandler(response, httptest.NewRequest(http.MethodPost, "/registerPeer", strings.NewReader(body)))
-	if response.Code != http.StatusConflict {
-		t.Fatalf("duplicate registration status = %d, want 409", response.Code)
+	if response.Code != http.StatusOK {
+		t.Fatalf("duplicate registration status = %d, want 200", response.Code)
+	}
+	updatedPeer := peers.GetPeerById(id)
+	if updatedPeer == nil || updatedPeer.Url != "http://updated.example" || updatedPeer.FirstSeen != firstPeer.FirstSeen || updatedPeer.LastSeen == firstPeer.LastSeen {
+		t.Fatalf("updated peer = %+v, first peer = %+v", updatedPeer, firstPeer)
 	}
 
 	batchID := uuid.NewString()
@@ -99,6 +111,47 @@ func TestRegistrationPreservesIDAndRelaysURL(t *testing.T) {
 	batchPeer := peers.GetPeerById(batchID)
 	if batchPeer == nil || batchPeer.Url != "http://batch.example" || batchPeer.Status != peers.StatusHealthy {
 		t.Fatalf("registered batch peer = %+v", batchPeer)
+	}
+	body = `{"peers":[{"id":"` + batchID + `","url":"HTTP://UPDATED-BATCH.EXAMPLE/"}]}`
+	response = httptest.NewRecorder()
+	server.RegisterPeersReceivedHandler(response, httptest.NewRequest(http.MethodPost, "/registerPeersReceived", strings.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("updated batch status = %d, want 200", response.Code)
+	}
+	batchPeer = peers.GetPeerById(batchID)
+	if batchPeer == nil || batchPeer.Url != "http://updated-batch.example" {
+		t.Fatalf("updated batch peer = %+v", batchPeer)
+	}
+}
+
+func TestRegisterPeerHandlerDoesNotChangeLocalPeer(t *testing.T) {
+	client := &http.Client{Transport: registrationTransport(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})}
+	server := &Server{peersStore: peers.NewStore(client), utilsStore: utils.NewStore("UTC")}
+	id := uuid.NewString()
+	peers.RegisterPeer(peers.Peer{
+		Id:        id,
+		Url:       "http://local.example",
+		Me:        true,
+		FirstSeen: "first",
+		LastSeen:  "last",
+		Status:    peers.StatusHealthy,
+	})
+	before := peers.GetPeerById(id)
+	if before == nil {
+		t.Fatal("local peer not found")
+	}
+
+	response := httptest.NewRecorder()
+	body := `{"id":"` + id + `","url":"http://remote.example"}`
+	server.RegisterPeerHandler(response, httptest.NewRequest(http.MethodPost, "/registerPeer", strings.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	after := peers.GetPeerById(id)
+	if after == nil || *after != *before {
+		t.Fatalf("local peer changed from %+v to %+v", before, after)
 	}
 }
 

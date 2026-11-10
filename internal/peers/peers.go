@@ -63,6 +63,26 @@ func RegisterPeer(peer Peer) *Peer {
 	return &registeredPeer
 }
 
+func UpsertPeer(id, url, now string) (peer Peer, existed bool) {
+	peersTable.mu.Lock()
+	defer peersTable.mu.Unlock()
+
+	existing, existed := peersTable.Peers[id]
+	if !existed {
+		peer = Peer{Id: id, Url: url, FirstSeen: now, LastSeen: now, Status: ""}
+		peersTable.Peers[id] = &peer
+		return peer, false
+	}
+	if existing.Me {
+		return *existing, true
+	}
+	updated := *existing
+	updated.Url = url
+	updated.LastSeen = now
+	peersTable.Peers[id] = &updated
+	return updated, true
+}
+
 func GetAllPeers() []Peer {
 	peers := []Peer{}
 	peersTable.mu.RLock()

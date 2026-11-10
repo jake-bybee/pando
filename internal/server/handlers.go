@@ -336,31 +336,25 @@ func (s *Server) RegisterPeerHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("[/registerPeer] Invalid URL:", registerRequest.Url)
 		return
 	}
-	if peers.GetPeerById(registerRequest.Id) != nil {
-		writeJSONResponse(w, http.StatusConflict, "Peer already registered")
-		fmt.Println("[/registerPeer] Peer already registered with URL:", normalizedUrl)
-		return
-	}
-
 	registeredTime := s.utilsStore.TimeNow()
-	peers.RegisterPeer(peers.Peer{
-		Url:       normalizedUrl,
-		Id:        registerRequest.Id,
-		FirstSeen: registeredTime,
-		LastSeen:  registeredTime,
-		Status:    "",
-	})
-	fmt.Println("[/registerPeer] Registered peer:", normalizedUrl)
-
-	var status peers.PeerStatus
-	isHealthy := s.peersStore.CheckPeerHealth(registerRequest.Id)
-	if !isHealthy {
-		status = peers.StatusUnhealthy
+	registeredPeer, existed := peers.UpsertPeer(registerRequest.Id, normalizedUrl, registeredTime)
+	if existed {
+		fmt.Println("[/registerPeer] Updated peer:", normalizedUrl)
 	} else {
-		status = peers.StatusHealthy
+		fmt.Println("[/registerPeer] Registered peer:", normalizedUrl)
 	}
 
-	registeredPeer := peers.UpdatePeerStatus(registerRequest.Id, status)
+	if !registeredPeer.Me {
+		var status peers.PeerStatus
+		isHealthy := s.peersStore.CheckPeerHealth(registerRequest.Id)
+		if !isHealthy {
+			status = peers.StatusUnhealthy
+		} else {
+			status = peers.StatusHealthy
+		}
+
+		registeredPeer = *peers.UpdatePeerStatus(registerRequest.Id, status)
+	}
 
 	writeJSONResponse(w, http.StatusOK, registeredPeer)
 	fmt.Println("[/registerPeer] Successfully registered peer with URL:", normalizedUrl)
@@ -407,22 +401,21 @@ func (s *Server) RegisterPeersReceivedHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	for _, peerInfo := range registerRequest.Peers {
-		if peers.GetPeerById(peerInfo.Id) == nil {
-			registeredTime := s.utilsStore.TimeNow()
-			peers.RegisterPeer(peers.Peer{
-				Url:       peerInfo.Url,
-				Id:        peerInfo.Id,
-				FirstSeen: registeredTime,
-				LastSeen:  registeredTime,
-				Status:    "",
-			})
+		previousPeer := peers.GetPeerById(peerInfo.Id)
+		registeredTime := s.utilsStore.TimeNow()
+		registeredPeer, existed := peers.UpsertPeer(peerInfo.Id, peerInfo.Url, registeredTime)
+		if !registeredPeer.Me && (!existed || previousPeer.Url != peerInfo.Url) {
 			isHealthy := s.peersStore.CheckPeerHealth(peerInfo.Id)
 			if isHealthy {
 				peers.UpdatePeerStatus(peerInfo.Id, peers.StatusHealthy)
 			} else {
 				peers.UpdatePeerStatus(peerInfo.Id, peers.StatusUnhealthy)
 			}
-			fmt.Println("[/registerPeersReceived] Registered peer:", peerInfo.Url)
+			if existed {
+				fmt.Println("[/registerPeersReceived] Updated peer:", peerInfo.Url)
+			} else {
+				fmt.Println("[/registerPeersReceived] Registered peer:", peerInfo.Url)
+			}
 		}
 	}
 
