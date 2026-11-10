@@ -7,20 +7,18 @@ services:
     image: pando:latest
     container_name: pando
     restart: unless-stopped
+    # Share the host's network so the container can use the host's
+    # NetBird connection and DNS. The "ports:" block is not needed.
+    network_mode: host
     env_file: .env
     environment:
       # Must match the volume mount below, so it overrides .env
       BACKUP_FOLDER_PATH: /backup
-    ports:
-      - "8080:8080" # change both sides if you change LISTEN_PORT in .env
     volumes:
-      - ./data:/backup
-    # The container can't look up NetBird names, so give it the IP.
-    # Delete this block if IMMICH_URL uses a normal DNS name or an IP.
-    extra_hosts:
-      - "jake-home-server-235-160.netbird.selfhosted:100.67.235.160"
+      - ./data:/backup:z
     healthcheck:
       # /status is cheap. /health would call Immich every time.
+      # If you change LISTEN_PORT in .env, change the port here too.
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/status"]
       interval: 30s
       timeout: 5s
