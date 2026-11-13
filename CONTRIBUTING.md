@@ -21,7 +21,7 @@ mise run test
 ```
 
 The task builds `/tmp/pando` first and gives the processes local `SELF_URL`
-and `MASTER_PANDO_URL` values. It does not provide an Immich server, so use it
+and `BOOTSTRAP_PEER_URL` values. It does not provide an Immich server, so use it
 for peer and startup behavior rather than a complete backup run.
 
 ## Project layout

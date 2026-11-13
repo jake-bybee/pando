@@ -13,17 +13,16 @@ import (
 )
 
 type Config struct {
-	ImmichUrl        string
-	ImmichApiToken   string
-	SelfUrl          string
-	MasterPandoPort  string
-	MasterPandoUrl   string
-	BackupFolderPath string
-	TimeZone         string
-	NumPeers         int
-	NumReplicas      int
-	ListenPort       string
-	MinFreeBytes     uint64
+	ImmichUrl             string
+	ImmichApiToken        string
+	SelfUrl               string
+	BootstrapPeerUrl      string
+	BackupFolderPath      string
+	TimeZone              string
+	NumPeers              int
+	NumReplicas           int
+	ListenPort            string
+	MinFreeBytes          uint64
 	StorageRecheckSeconds int
 }
 
@@ -45,8 +44,7 @@ func loadFromEnvironment() (*Config, error) {
 		ImmichUrl:        os.Getenv("IMMICH_URL"),
 		ImmichApiToken:   os.Getenv("IMMICH_API_TOKEN"),
 		SelfUrl:          os.Getenv("SELF_URL"),
-		MasterPandoPort:  os.Getenv("MASTER_PANDO_PORT"),
-		MasterPandoUrl:   os.Getenv("MASTER_PANDO_URL"),
+		BootstrapPeerUrl: os.Getenv("BOOTSTRAP_PEER_URL"),
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
 		TimeZone:         os.Getenv("TIME_ZONE"),
 		NumPeers:         ParseNumPeers(),
@@ -93,14 +91,14 @@ func loadFromEnvironment() (*Config, error) {
 		log.Println("LISTEN_PORT is not set, using default 8080")
 		config.ListenPort = "8080" // default port if not set
 	}
-	if config.MasterPandoUrl == "" {
-		masterPandoUrl, err := getMasterPandoUrlFromImmichUrl()
+	if config.BootstrapPeerUrl == "" {
+		bootstrapPeerUrl, err := getBootstrapPeerUrlFromImmichUrl()
 		if err != nil {
 			return nil, err
 		}
-		config.MasterPandoUrl, err = utils.NormalizeURL(masterPandoUrl)
+		config.BootstrapPeerUrl, err = utils.NormalizeURL(bootstrapPeerUrl)
 		if err != nil {
-			return nil, fmt.Errorf("failed to normalize MASTER_PANDO_URL: %v", err)
+			return nil, fmt.Errorf("failed to normalize BOOTSTRAP_PEER_URL: %v", err)
 		}
 
 	}
@@ -119,8 +117,8 @@ func loadFromEnvironment() (*Config, error) {
 	return config, nil
 }
 
-func getMasterPandoUrlFromImmichUrl() (string, error) {
-	log.Println("Can't parse master pando URL from immich url, please provide an master pando URL in the environment variable MASTER_PANDO_URL")
-	return "", fmt.Errorf("can't parse master pando URL from immich url")
+func getBootstrapPeerUrlFromImmichUrl() (string, error) {
+	log.Println("Can't parse bootstrap peer URL from immich url, please provide a bootstrap peer URL in the environment variable BOOTSTRAP_PEER_URL")
+	return "", fmt.Errorf("can't parse bootstrap peer URL from immich url")
 
 }

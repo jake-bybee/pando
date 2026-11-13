@@ -3,9 +3,12 @@
 Back up your Immich photos across several machines, with no central server.
 
 One disk, or one house, is a single point of failure for a photo library. Pando
-runs the same service on every peer and uses consistent hashing to decide which
+runs the same service on every peer and uses rendezvous hashing to decide which
 peers store each Immich asset, so the placement does not require a central
 database or coordinator.
+
+Self-hosting photos on one box is a single point of failure, and existing tools
+often require a central server or cloud service.
 
 ## Status
 
@@ -31,19 +34,26 @@ is intentionally commented out until `docs/dashboard.png` is added.
 ```mermaid
 flowchart LR
     I[Immich] --> P[Pando peers]
-    P --> H[Hash asset ID with peer IDs]
+    P --> H[Score each peer for this asset]
     H --> R[Choose the highest-scoring NUM_REPLICAS peers]
     R --> P1[Peer 1]
     R --> P2[Peer 2]
     R --> P3[Peer 3]
 ```
 
-- A **peer** is one running Pando process with its own backup directory and persistent ID.
+- A **peer** is one running Pando process with its own backup directory and persistent ID. Every peer runs the same code, and there is no coordinator or shared database.
 - Pando checks Immich access and local storage before starting its backup loop.
-- Peers register with the configured master peer and relay the known peer list.
-- Consistent hashing assigns each asset to the configured number of **replicas**, meaning independent peer copies.
+- A new peer registers with any existing peer, called the **bootstrap peer**. That peer relays the peer list. After joining, the bootstrap peer has no special role.
+- Rendezvous hashing assigns each asset to the configured number of **replicas**, meaning independent peer copies.
 - Each peer polls Immich, downloads its assignments, and records successful downloads in a **manifest**, a map of asset IDs to their original filenames.
 - The dashboard reports cluster state, node health, storage, and asset locations.
+
+## Design decisions
+
+- **Leaderless placement.** Rendezvous hashing means any peer can compute where an asset lives. When a peer joins or leaves, only the assets it ranked for move, instead of reshuffling everything.
+- **Immich as the source of truth.** Pando polls Immich and downloads assignments, so it does not need to intercept uploads.
+- **Manifest per peer.** Each peer records what it holds, written atomically, so restarts do not re-download everything.
+- **Known trade-off.** Membership is a static peer list for now, so a dead peer is not detected or replaced yet (see Roadmap).
 
 ## Quick start with Docker Compose
 
@@ -57,7 +67,7 @@ network connectivity between the Pando peers.
    ```
 
 2. Edit `.env` and set the Immich URL and API token, a reachable `SELF_URL`,
-   the master peer URL, `NUM_PEERS`, and `NUM_REPLICAS`. For a one-node test,
+   the bootstrap peer URL, `NUM_PEERS`, and `NUM_REPLICAS`. For a one-node test,
    use `NUM_PEERS=1`, `NUM_REPLICAS=1`, and point both peer URLs at that node.
 3. Build and start Pando:
 
@@ -112,8 +122,7 @@ Pando reads environment variables and an optional `.env` file.
 | `IMMICH_API_TOKEN` | Yes | None | Immich API key. |
 | `SELF_URL` | Yes | None | URL other peers use to reach this peer. |
 | `BACKUP_FOLDER_PATH` | Yes | None | Existing directory for downloaded assets and settings. |
-| `MASTER_PANDO_URL` | Yes | None | Peer URL used for initial registration. |
-| `MASTER_PANDO_PORT` | No | None | Read from the environment, but no fallback is currently implemented when `MASTER_PANDO_URL` is empty. |
+| `BOOTSTRAP_PEER_URL` | Yes | None | URL of any running peer, used once at startup to join the cluster. |
 | `NUM_PEERS` | Yes | `0` when unset or invalid | Expected total number of peers. |
 | `NUM_REPLICAS` | Yes | `0` when unset or invalid | Number of peers that should store each asset. |
 | `LISTEN_PORT` | No | `8080` | HTTP port for this peer. |
@@ -186,11 +195,11 @@ Done:
 Planned:
 
 - [ ] Detect peer failures and mark assignments unavailable automatically
+- [ ] Authenticate peer endpoints
 - [ ] Reconcile manifests between peers
 - [ ] Add quorum or verified-write handling
 - [ ] Add a dashboard action to remove a peer
 - [ ] Show the count of under-replicated photos in the dashboard
-- [ ] Authenticate peer endpoints
 - [ ] Add a metrics endpoint
 
 ## Contributing
@@ -205,7 +214,6 @@ Good first issues:
 
 - Add handler tests for the dashboard's method and response behavior.
 - Add a dashboard indicator for under-replicated assets once detection exists.
-- Implement the documented `MASTER_PANDO_PORT` fallback behavior.
 - Add tests for manifest reconciliation edge cases.
 - Add method validation and response tests for internal peer endpoints.
 
