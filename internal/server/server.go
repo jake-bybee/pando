@@ -70,8 +70,8 @@ func (s *Server) Start() error {
 	fmt.Println("Starting server on", addr)
 
 	go func() {
-		if err := s.relayMeToPeer(s.envVariables.BootstrapPeerUrl, peers.GetMe().Id); err != nil {
-			fmt.Printf("Failed to relay to bootstrap peer: %v\n", err)
+		if err := s.relayMeToPeer(s.envVariables.SeedPeerUrl, peers.GetMe().Id); err != nil {
+			fmt.Printf("Failed to relay to seed peer: %v\n", err)
 		}
 	}()
 

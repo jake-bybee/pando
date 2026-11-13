@@ -43,7 +43,7 @@ flowchart LR
 
 - A **peer** is one running Pando process with its own backup directory and persistent ID. Every peer runs the same code, and there is no coordinator or shared database.
 - Pando checks Immich access and local storage before starting its backup loop.
-- A new peer registers with any existing peer, called the **bootstrap peer**. That peer relays the peer list. After joining, the bootstrap peer has no special role.
+- A new peer registers with any existing peer, called the **seed peer**. That peer relays the peer list. After joining, the seed peer has no special role.
 - Rendezvous hashing assigns each asset to the configured number of **replicas**, meaning independent peer copies.
 - Each peer polls Immich, downloads its assignments, and records successful downloads in a **manifest**, a map of asset IDs to their original filenames.
 - The dashboard reports cluster state, node health, storage, and asset locations.
@@ -67,7 +67,7 @@ network connectivity between the Pando peers.
    ```
 
 2. Edit `.env` and set the Immich URL and API token, a reachable `SELF_URL`,
-   the bootstrap peer URL, `NUM_PEERS`, and `NUM_REPLICAS`. For a one-node test,
+  the seed peer URL, `NUM_PEERS`, and `NUM_REPLICAS`. For a one-node test,
    use `NUM_PEERS=1`, `NUM_REPLICAS=1`, and point both peer URLs at that node.
 3. Build and start Pando:
 
@@ -122,7 +122,7 @@ Pando reads environment variables and an optional `.env` file.
 | `IMMICH_API_TOKEN` | Yes | None | Immich API key. |
 | `SELF_URL` | Yes | None | URL other peers use to reach this peer. |
 | `BACKUP_FOLDER_PATH` | Yes | None | Existing directory for downloaded assets and settings. |
-| `BOOTSTRAP_PEER_URL` | Yes | None | URL of any running peer, used once at startup to join the cluster. |
+| `SEED_PEER_URL` | Yes | None | Peer URL used for initial registration. |
 | `NUM_PEERS` | Yes | `0` when unset or invalid | Expected total number of peers. |
 | `NUM_REPLICAS` | Yes | `0` when unset or invalid | Number of peers that should store each asset. |
 | `LISTEN_PORT` | No | `8080` | HTTP port for this peer. |

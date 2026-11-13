@@ -16,7 +16,7 @@ type Config struct {
 	ImmichUrl             string
 	ImmichApiToken        string
 	SelfUrl               string
-	BootstrapPeerUrl      string
+	SeedPeerUrl           string
 	BackupFolderPath      string
 	TimeZone              string
 	NumPeers              int
@@ -44,7 +44,7 @@ func loadFromEnvironment() (*Config, error) {
 		ImmichUrl:        os.Getenv("IMMICH_URL"),
 		ImmichApiToken:   os.Getenv("IMMICH_API_TOKEN"),
 		SelfUrl:          os.Getenv("SELF_URL"),
-		BootstrapPeerUrl: os.Getenv("BOOTSTRAP_PEER_URL"),
+		SeedPeerUrl:      os.Getenv("SEED_PEER_URL"),
 		BackupFolderPath: os.Getenv("BACKUP_FOLDER_PATH"),
 		TimeZone:         os.Getenv("TIME_ZONE"),
 		NumPeers:         ParseNumPeers(),
@@ -91,14 +91,14 @@ func loadFromEnvironment() (*Config, error) {
 		log.Println("LISTEN_PORT is not set, using default 8080")
 		config.ListenPort = "8080" // default port if not set
 	}
-	if config.BootstrapPeerUrl == "" {
-		bootstrapPeerUrl, err := getBootstrapPeerUrlFromImmichUrl()
+	if config.SeedPeerUrl == "" {
+		seedPeerUrl, err := getSeedPeerUrlFromImmichUrl()
 		if err != nil {
 			return nil, err
 		}
-		config.BootstrapPeerUrl, err = utils.NormalizeURL(bootstrapPeerUrl)
+		config.SeedPeerUrl, err = utils.NormalizeURL(seedPeerUrl)
 		if err != nil {
-			return nil, fmt.Errorf("failed to normalize BOOTSTRAP_PEER_URL: %v", err)
+			return nil, fmt.Errorf("failed to normalize SEED_PEER_URL: %v", err)
 		}
 
 	}
@@ -117,8 +117,8 @@ func loadFromEnvironment() (*Config, error) {
 	return config, nil
 }
 
-func getBootstrapPeerUrlFromImmichUrl() (string, error) {
-	log.Println("Can't parse bootstrap peer URL from immich url, please provide a bootstrap peer URL in the environment variable BOOTSTRAP_PEER_URL")
-	return "", fmt.Errorf("can't parse bootstrap peer URL from immich url")
+func getSeedPeerUrlFromImmichUrl() (string, error) {
+	log.Println("Can't parse seed peer URL from immich url, please provide a seed peer URL in the environment variable SEED_PEER_URL")
+	return "", fmt.Errorf("can't parse seed peer URL from immich url")
 
 }
