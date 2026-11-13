@@ -1,10 +1,6 @@
 services:
   pando:
-    build:
-      context: .
-      args:
-        VERSION: ${VERSION:-dev}
-    image: pando:latest
+    image: ghcr.io/jake-bybee/pando:latest
     container_name: pando
     restart: unless-stopped
     # Share the host's network so the container can use the host's

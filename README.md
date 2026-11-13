@@ -72,7 +72,8 @@ network connectivity between the Pando peers.
 3. Build and start Pando:
 
    ```sh
-   docker compose up -d --build
+    docker compose pull
+    docker compose up -d
    ```
 
 4. Open [http://localhost:8080/dashboard](http://localhost:8080/dashboard).
@@ -82,8 +83,7 @@ The Compose file mounts `./data` at `/backup` and sets
 Compose setup. The `:z` volume label is needed on Fedora and other SELinux
 environments. Compose uses `network_mode: host` so the container can use host
 networking and private-network connectivity such as NetBird or Tailscale.
-Compose builds the repository's `Dockerfile`; `.dockerignore` keeps `data/`,
-`.git/`, `.env`, and ZIP archives out of the Docker build context.
+Compose pulls the published image from GitHub Container Registry.
 
 When using `docker run --env-file` directly, use unquoted values in the env
 file. Keep the backup volume mounted at the path in `BACKUP_FOLDER_PATH`, and
